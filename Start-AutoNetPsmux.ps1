@@ -1,9 +1,19 @@
 $ErrorActionPreference = "Stop"
 
-$PsmuxPath = "C:\Users\Administrator\AppData\Local\Programs\psmux\psmux.exe"
-$PythonPath = "C:\Users\Administrator\Desktop\AutoNet\.venv\Scripts\python.exe"
-$ScriptPath = "C:\Users\Administrator\Desktop\AutoNet\AutoNet.py"
-$WorkingDirectory = "C:\Users\Administrator\Desktop\AutoNet"
+$PsmuxCommand = Get-Command psmux.exe -CommandType Application -ErrorAction SilentlyContinue
+if (-not $PsmuxCommand) {
+    throw "找不到 psmux.exe，请安装 psmux 并将其添加到 PATH。"
+}
+$PsmuxPath = $PsmuxCommand.Source
+$WorkingDirectory = $PSScriptRoot
+$PythonPath = Join-Path $WorkingDirectory ".venv\Scripts\python.exe"
+$ScriptPath = Join-Path $WorkingDirectory "AutoNet.py"
+if (-not (Test-Path -LiteralPath $PythonPath -PathType Leaf)) {
+    throw "找不到项目虚拟环境中的 Python：$PythonPath"
+}
+if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+    throw "找不到项目脚本：$ScriptPath"
+}
 $SessionName = "net"
 $WindowName = "AutoNet"
 
