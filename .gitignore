@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+config.enc
+debug/
+logs/
+*.log
+*.pid
+*.bak
+*.pre-*
