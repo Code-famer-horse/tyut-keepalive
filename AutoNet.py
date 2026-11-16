@@ -363,6 +363,9 @@ def attempt_login(acc_enc, pwd_enc):
 def main():
     # --daemon: 后台模式，脱离控制台运行
     if "--daemon" in sys.argv:
+        if os.name != "nt":
+            print("Linux 请使用 tmux 启动：bash start-linux.sh")
+            return
         import subprocess as _sp
         base = os.path.dirname(__file__)
         pid_file = os.path.join(base, "autonet.pid")
