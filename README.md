@@ -7,7 +7,7 @@
 - Windows 或 Linux
 - Python 3.10 或更高版本
 - [uv](https://docs.astral.sh/uv/)
-- 使用后台会话时，需要安装 `psmux` 并将其加入 `PATH`
+- 后台会话：Windows 使用 [psmux](https://github.com/psmux/psmux)（需加入 `PATH`），Linux 使用 [tmux](https://github.com/tmux/tmux)；前台运行不需要它们
 
 ## 安装
 
