@@ -15,22 +15,32 @@ Rust 版校园网自动登录核心，参考 [NoRegret-L/tyut-keepalive](https:/
 
 注意：exe 窗口关闭即停止保活。需要“登录后常驻、不显示窗口”时，安装 psmux 后使用本仓库的 `启动校园网登录.bat`，见第 5 节。`config.enc` 仅作 XOR 混淆，不是安全加密，不要分享。
 
+### Linux（预编译版）
+
+1. 新建目录，把 `tyut-keepalive-linux-x86_64` 放进去，执行 `chmod +x tyut-keepalive-linux-x86_64`。
+2. 前台首次运行：`./tyut-keepalive-linux-x86_64 --once --config ./config.enc`，按提示输入账号密码，生成 `config.enc`。
+3. 后台常驻：`nohup ./tyut-keepalive-linux-x86_64 --config ./config.enc > autonet.log 2>&1 &`；停止用 `pkill -f tyut-keepalive-linux-x86_64`。需要会话管理时用仓库的 `start-linux.sh`（tmux），见第 6 节。
+
 ## 2. 发布版下载与校验
 
-| 项目 | 内容 |
-|---|---|
-| 版本 | v0.1.0 Windows x86_64 |
-| 下载 | https://github.com/NoRegret-L/tyut-keepalive/releases/tag/v0.1.0 |
-| 文件名 | 页面显示 `tyut-keepalive-windows-x86_64.exe` |
-| SHA-256 | `917f1a39d1daff77d650c23b258272a5bcae075581d9fef467e312d15757fd59` |
+下载地址：https://github.com/NoRegret-L/tyut-keepalive/releases/tag/v0.1.0
 
-校验命令（在 exe 所在目录打开 PowerShell）：
+| 平台 | Release 资产 | SHA-256 |
+|---|---|---|
+| Windows x86_64 | `tyut-keepalive-windows-x86_64.exe` | `917f1a39d1daff77d650c23b258272a5bcae075581d9fef467e312d15757fd59` |
+| Linux x86_64 | `tyut-keepalive-linux-x86_64` | `9820455bcb4de030553cc169b02397b9a30a4b66d76fd6275d63bea2e9ae2e76` |
+
+校验命令（在二进制所在目录）：
 
 ```powershell
 Get-FileHash .\tyut-keepalive.exe -Algorithm SHA256
 ```
 
-Linux 暂无预编译包，请用第 3 节自行编译。浏览器若把文件保存为 `.exe.zip` 或 `.exe.crdownload`，请先改回 `.exe` 再运行。
+```bash
+sha256sum ./tyut-keepalive-linux-x86_64
+```
+
+Linux 下载后需要 `chmod +x tyut-keepalive-linux-x86_64`。浏览器若把文件保存为 `.exe.zip` 或 `.exe.crdownload`，请先改回 `.exe` 再运行。
 
 ## 3. 编译（Windows / Linux）
 
