@@ -33,7 +33,7 @@ fn now() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
-fn flag(path: &PathBuf, name: &str) -> bool {
+pub(crate) fn flag(path: &PathBuf, name: &str) -> bool {
     let file = path.join(name);
     if file.exists() {
         let _ = std::fs::remove_file(file);
@@ -128,6 +128,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
             }
             let current = credentials.as_ref().expect("凭证已加载");
             let force = flag(&control, "reconnect");
+            let mut immediate = false;
             let online = !force && portal::check_network(&probe);
             if online {
                 retry = RETRY_INITIAL;
@@ -139,10 +140,15 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     &last_login,
                     "网络正常，10 分钟后复查",
                 );
-                let _ = tick(WATCH_INTERVAL, &control);
-                continue;
+                if !tick(WATCH_INTERVAL, &control) {
+                    continue;
+                }
+                // [设计意图/根因] -> tick 消费 reconnect 后丢弃返回值，使在线状态的“立即重连”被打回 600 秒等待
+                // [理论先验/数学假设] -> flag 为一次性信号，消费即须在本轮生效，否则信号永久丢失
+                // [机制闭环解释] -> 返回 true 时跳过复查与 retry 延迟，直接进入强制登录分支
+                immediate = true;
             }
-            if !force {
+            if !force && !immediate {
                 thread::sleep(Duration::from_secs(1));
                 if portal::check_network(&probe) {
                     continue;
@@ -156,7 +162,9 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 &last_login,
                 "正在尝试登录",
             );
-            let _ = tick(retry, &control);
+            if !immediate {
+                let _ = tick(retry, &control);
+            }
             match portal::attempt_login(current, None) {
                 Ok(true) => {
                     last_login = now();

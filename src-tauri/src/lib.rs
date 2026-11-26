@@ -28,6 +28,17 @@ mod tests {
         assert!(status.state.is_empty());
         assert!(status.account.is_empty());
     }
+
+    #[test]
+    fn reconnect_flag_is_consumed_once() {
+        let dir = std::env::temp_dir().join(format!("tyut-keepalive-flag-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("reconnect"), b"").unwrap();
+        assert!(crate::state::flag(&dir, "reconnect"));
+        assert!(!crate::state::flag(&dir, "reconnect"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 pub fn run() {
