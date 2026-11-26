@@ -44,6 +44,12 @@
           <article class="card metric"><h3>最近网络检查</h3><p id="lastCheck">—</p><span class="muted">后台实际检测时间</span></article>
           <article class="card metric"><h3>最近认证成功</h3><p id="lastLogin">—</p><span class="muted">最近成功认证记录</span></article>
         </div>
+        <div class="metrics">
+          <article class="card metric"><h3>本地日期内认证确认</h3><p id="authCount">—</p><span class="muted">认证接口确认成功或已在线</span></article>
+          <article class="card metric"><h3>本地日期内观测中断</h3><p id="outageCount">—</p><span class="muted">已在线到检测失败的转换</span></article>
+          <article class="card metric"><h3>本次观测在线时长</h3><p id="onlineDuration">—</p><span class="muted">截至最近刷新，非学校会话时长</span></article>
+          <article class="card metric"><h3>统计日期</h3><p id="statsDate">—</p><span id="storageStatus" class="muted">等待后台记录</span></article>
+        </div>
         <div class="actions">
           <button id="reconnect" class="primary" type="button" disabled>立即重连</button>
           <button id="setup" type="button">连接设置</button>
@@ -51,12 +57,13 @@
         <p class="footnote">隐藏窗口不会停止后台保活；彻底退出才会结束服务。</p>
       </section>
       <section id="page-logs" aria-labelledby="logsTitle" hidden>
-        <div class="section-heading"><h2 id="logsTitle">运行记录</h2><button id="clearHistory" class="quiet" type="button">清空显示</button></div>
+        <div class="section-heading"><h2 id="logsTitle">运行记录</h2><button id="refreshHistory" class="quiet" type="button">刷新记录</button></div>
         <div class="card">
-          <p class="muted">仅显示本次打开界面后收到的状态事件，非完整持久化日志。</p>
+          <p class="muted">显示最近 200 条本地持久化状态与认证事件。日志轮转保留有限历史，不包含账号或密码。</p>
           <label class="field">筛选状态
-            <select id="logFilter"><option value="all">全部</option><option value="success">在线</option><option value="warning">等待与异常</option><option value="danger">错误</option><option value="neutral">其他</option></select>
+            <select id="logFilter"><option value="all">全部</option><option value="success">在线</option><option value="warning">等待与异常</option><option value="danger">错误</option><option value="neutral">其他</option><option value="active">检查与认证</option></select>
           </label>
+          <label class="field">搜索运行记录<input id="logSearch" type="search" placeholder="输入事件名称或日期" /></label>
           <p id="historyEmpty" class="empty">暂无状态事件</p>
           <ol id="historyList" class="history-list" aria-label="最近状态事件"></ol>
         </div>
@@ -65,6 +72,10 @@
         <div class="section-heading"><h2 id="settingsTitle">应用设置</h2></div>
         <article class="card settings-card">
           <h3>外观与运行</h3>
+          <div class="setting-row">
+            <label for="notifications">系统通知<span class="muted">连接中断、恢复和凭据异常；系统可能限制显示</span></label>
+            <input id="notifications" class="toggle" type="checkbox" disabled />
+          </div>
           <div class="setting-row">
             <label for="theme">界面主题<span class="muted">跟随系统或手动选择</span></label>
             <select id="theme"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>

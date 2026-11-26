@@ -122,3 +122,6 @@ select { padding: 7px 12px; max-width: 100%; }
   .app-header .quiet { margin-left: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+#logSearch { padding: 8px 12px; width: 100%; }
+#storageStatus { overflow-wrap: anywhere; }

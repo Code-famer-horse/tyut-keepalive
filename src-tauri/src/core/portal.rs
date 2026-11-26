@@ -184,6 +184,7 @@ pub(crate) enum LoginOutcome {
     Success,
     BadPassword,
     Indeterminate,
+    Reachable,
 }
 
 pub(crate) fn interpret_login(text: &str) -> LoginOutcome {
@@ -242,6 +243,7 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials, cancelled: &A
         LoginOutcome::Success => log("登录接口确认成功或已在线"),
         LoginOutcome::BadPassword => log("登录失败：密码错误"),
         LoginOutcome::Indeterminate => log("登录响应无法确认结果；将检测网络连通性"),
+        LoginOutcome::Reachable => (),
     }
     Ok(outcome)
 }
@@ -269,7 +271,7 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
     thread::sleep(Duration::from_millis(500));
     let outcome = login(&client, user_ip, credentials, cancelled)?;
     match outcome {
-        LoginOutcome::Indeterminate if check_network(&client) => Ok(LoginOutcome::Success),
+        LoginOutcome::Indeterminate if check_network(&client) => Ok(LoginOutcome::Reachable),
         other => Ok(other),
     }
 }

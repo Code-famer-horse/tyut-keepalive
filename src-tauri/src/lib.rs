@@ -2,6 +2,7 @@ mod commands;
 mod core;
 mod state;
 mod tray;
+mod telemetry;
 use crate::core::{config, dns};
 use tauri::Manager;
 
@@ -48,6 +49,7 @@ pub fn run() {
     let from_autostart = std::env::args().any(|arg| arg == "--from-autostart");
     let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--from-autostart"]),
@@ -61,6 +63,8 @@ pub fn run() {
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             commands::get_status,
+            commands::get_telemetry,
+            commands::set_notifications,
             commands::reconnect,
             commands::reset_credentials,
             commands::setup_credentials,
@@ -71,8 +75,12 @@ pub fn run() {
             commands::hide_window,
         ])
         .setup(move |app| {
+            telemetry::init(app.handle())?;
+            if tray::create_tray(app.handle()).is_err() {
+                log("系统托盘初始化失败，使用窗口降级");
+            }
             state::start_worker(app.handle().clone(), shared)?;
-            if !from_autostart {
+            if !from_autostart || !tray::is_tray_available() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                 }
@@ -86,7 +94,6 @@ pub fn run() {
                     let _ = app.autolaunch().enable();
                 }
             }
-            tray::create_tray(app.handle())?;
             Ok(())
         })
         .build(tauri::generate_context!())

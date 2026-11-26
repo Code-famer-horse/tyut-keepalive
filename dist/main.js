@@ -1,4 +1,4 @@
-import { normalizeTheme, readTheme, saveTheme, describeState, addHistory } from "./ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState } from "./ui-state.js";
 const $ = id => document.getElementById(id);
 const pages = ["overview", "logs", "settings", "about"];
 const controls = ["reconnect", "saveCredentials", "reset", "autostart", "hide", "quit"];
@@ -11,6 +11,8 @@ let busy = false;
 let statusRevision = 0;
 let requestRevision = 0;
 let history = [];
+let telemetryRevision = 0;
+let telemetryKnown = false;
 function notice(message, error = false) {
   const el = $("notice");
   el.textContent = String(message || "");
@@ -24,7 +26,7 @@ function setPage(page) {
     if (button.dataset.page === page) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
-  if (page === "logs") renderHistory();
+  if (page === "logs") { renderHistory(); if (ready) refreshTelemetry(); }
 }
 for (const button of document.querySelectorAll("[data-page]")) {
   button.addEventListener("click", () => setPage(button.dataset.page));
@@ -47,6 +49,7 @@ $("theme").addEventListener("change", () => {
 });
 function updateControls() {
   for (const id of controls) $(id).disabled = !ready || busy || (id === "autostart" && !autostartKnown);
+  $("notifications").disabled = !ready || busy || !telemetryKnown;
 }
 function render(status) {
   if (!status || typeof status !== "object") return;
@@ -60,7 +63,9 @@ function render(status) {
 }
 function renderHistory() {
   const filter = $("logFilter").value;
-  const entries = history.filter(entry => filter === "all" || entry.tone === filter);
+  const query = $("logSearch").value.trim().toLowerCase();
+  const entries = history.filter(entry => (filter === "all" || entry.tone === filter) &&
+    (entry.label + " " + entry.receivedAt).toLowerCase().includes(query));
   const fragment = document.createDocumentFragment();
   for (const entry of entries) {
     const li = document.createElement("li");
@@ -79,7 +84,55 @@ function renderHistory() {
   $("historyEmpty").hidden = entries.length > 0;
 }
 $("logFilter").addEventListener("change", renderHistory);
-$("clearHistory").addEventListener("click", () => { history = []; renderHistory(); });
+$("logSearch").addEventListener("input", renderHistory);
+$("refreshHistory").addEventListener("click", refreshTelemetry);
+const specialEvents = {
+  "auth-confirmed": ["认证接口确认成功或已在线", "success"],
+  "connection-lost": ["检测到连接中断", "warning"],
+  "connection-restored": ["检测到连接恢复", "success"],
+  "credentials-changed": ["凭据配置已变更或正在清除", "neutral"],
+};
+function duration(seconds) {
+  if (seconds == null) return "—";
+  const n = Math.max(0, Math.floor(seconds));
+  return Math.floor(n / 3600) + ":" + String(Math.floor(n / 60) % 60).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+}
+async function refreshTelemetry() {
+  if (!ready) return;
+  const revision = ++telemetryRevision;
+  try {
+    const data = await invoke("get_telemetry");
+    if (revision !== telemetryRevision) return;
+    $("authCount").textContent = String(data.daily.authConfirmed);
+    $("outageCount").textContent = String(data.daily.interruptions);
+    $("onlineDuration").textContent = duration(data.observedOnlineSeconds);
+    $("statsDate").textContent = data.daily.date;
+    $("storageStatus").textContent = data.persistenceOk ? "日志已启用本地持久化" : "日志存储异常，统计可能不完整";
+    $("notifications").checked = data.notificationsEnabled;
+    telemetryKnown = true;
+    history = data.rows.map(row => {
+      const [label, tone] = Object.hasOwn(specialEvents, row.kind) ? specialEvents[row.kind] : describeState(row.kind);
+      return {label, tone, message: "", receivedAt: row.time};
+    });
+    if (!$("page-logs").hidden) renderHistory();
+  } catch (error) {
+    if (revision !== telemetryRevision) return;
+    telemetryKnown = false;
+    $("storageStatus").textContent = "无法读取运行记录";
+  } finally { updateControls(); }
+}
+$("notifications").addEventListener("change", () => action(async () => {
+  const enabled = $("notifications").checked;
+  ++telemetryRevision;
+  try {
+    const actual = await invoke("set_notifications", { enabled });
+    $("notifications").checked = actual;
+    notice(actual ? "系统通知已启用" : "系统通知已关闭");
+  } catch (error) {
+    await refreshTelemetry();
+    throw error;
+  }
+}));
 async function refreshStatus() {
   const request = ++requestRevision;
   const eventRevision = statusRevision;
@@ -103,7 +156,7 @@ async function refreshAutostart() {
 }
 async function refresh() {
   if (!ready || busy) return;
-  try { await Promise.all([refreshStatus(), refreshAutostart()]); }
+  try { await Promise.all([refreshStatus(), refreshAutostart(), refreshTelemetry()]); }
   catch (error) { notice("读取状态失败：" + String(error), true); }
 }
 async function action(fn) {
@@ -168,14 +221,15 @@ async function init() {
     await listen("status", event => {
       statusRevision += 1;
       render(event.payload);
-      history = addHistory(history, event.payload, new Date().toISOString());
-      if (!$("page-logs").hidden) renderHistory();
+      // Journal events are delivered separately, including while the window is hidden.
     });
+    await listen("telemetry-changed", () => { if (ready && !document.hidden) refreshTelemetry(); });
+    await listen("open-settings", () => setPage("settings"));
     await refreshStatus();
     ready = true;
     $("serviceText").textContent = "后台服务已连接";
     updateControls();
-    await refreshAutostart();
+    await Promise.all([refreshAutostart(), refreshTelemetry()]);
     try {
       const version = await tauri.app?.getVersion?.();
       if (version) $("appVersion").textContent = "v" + version + " · 开发分支";

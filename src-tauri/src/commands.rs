@@ -9,6 +9,14 @@ pub(crate) fn get_status(status: State<'_, SharedStatus>) -> Result<serde_json::
 }
 
 #[tauri::command]
+pub(crate) fn get_telemetry(state: State<'_, crate::telemetry::Shared>) -> Result<crate::telemetry::Snapshot, String> {
+    crate::telemetry::snapshot(&state)
+}
+#[tauri::command]
+pub(crate) fn set_notifications(state: State<'_, crate::telemetry::Shared>, enabled: bool) -> Result<bool, String> {
+    crate::telemetry::set_enabled(&state, enabled)
+}
+#[tauri::command]
 pub(crate) fn reconnect(scheduler: State<'_, Scheduler>) -> Result<(), String> {
     scheduler.send(Event::Reconnect)
 }

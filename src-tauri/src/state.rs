@@ -70,12 +70,18 @@ fn now() -> String {
 }
 fn publish(app: &AppHandle, shared: &SharedStatus, status: &mut Status,
            state: ConnectionState, message: impl Into<String>) {
+    publish_observed(app, shared, status, state, message, None, false);
+}
+fn publish_observed(app: &AppHandle, shared: &SharedStatus, status: &mut Status,
+                    state: ConnectionState, message: impl Into<String>, observation: Option<bool>, authenticated: bool) {
     status.state = state;
     status.message = message.into();
     if let Ok(mut guard) = shared.lock() {
         *guard = status.clone();
     }
     let _ = app.emit("status", status.clone());
+    crate::telemetry::on_state(app, state, observation, authenticated);
+    crate::tray::update(app, state);
 }
 
 fn due(task: Task, delay: Duration) -> Option<(Instant, Task)> {
@@ -103,7 +109,11 @@ fn launch(tx: Sender<Event>, generation: u64, task: Task, value: config::Credent
                     return Ok(Outcome::Checked(online));
                 }
             }
-            Ok(Outcome::Authenticated(portal::attempt_login(&value, None, &cancelled)?))
+            let result = portal::attempt_login(&value, None, &cancelled)?;
+            Ok(match result {
+                portal::LoginOutcome::Reachable => Outcome::Checked(true),
+                other => Outcome::Authenticated(other),
+            })
         })().unwrap_or(Outcome::Failed);
         // Network errors may include sensitive URLs. Only send a classified result.
         let _ = tx.send(Event::Finished { generation, task, outcome });
@@ -175,6 +185,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     // Invalidate results from prior credentials before touching storage.
                     if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
                     generation = generation.wrapping_add(1);
+                    crate::telemetry::credentials_changed(&app);
                     active = None;
                     next = None;
                     retry = RETRY_INITIAL;
@@ -196,6 +207,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 Ok(Event::Clear(reply)) => {
                     if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
                     generation = generation.wrapping_add(1);
+                    crate::telemetry::credentials_changed(&app);
                     active = None;
                     next = None;
                     retry = RETRY_INITIAL;
@@ -221,7 +233,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                             if matches!(outcome, Outcome::Authenticated(_)) { status.last_login = now(); }
                             retry = RETRY_INITIAL;
                             next = due(Task::Check, WATCH_INTERVAL);
-                            publish(&app, &shared, &mut status, ConnectionState::Online, "网络正常，10 分钟后复查");
+                            publish_observed(&app, &shared, &mut status, ConnectionState::Online, "网络正常，10 分钟后复查", Some(true), matches!(outcome, Outcome::Authenticated(portal::LoginOutcome::Success)));
                         }
                         Outcome::Authenticated(portal::LoginOutcome::BadPassword) => {
                             next = None;
@@ -232,8 +244,13 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                                 retry = (retry * 2).min(RETRY_MAX);
                             }
                             next = due(Task::Retry, retry);
-                            publish(&app, &shared, &mut status, ConnectionState::Offline,
-                                format!("网络异常，{} 秒后重试", retry.as_secs()));
+                            // A transport error alone is not proof of a lost network link.
+                            let observation = match other {
+                                Outcome::Checked(false) | Outcome::Authenticated(portal::LoginOutcome::Indeterminate) => Some(false),
+                                _ => None,
+                            };
+                            publish_observed(&app, &shared, &mut status, ConnectionState::Offline,
+                                format!("网络异常，{} 秒后重试", retry.as_secs()), observation, false);
                         }
                     }
                 }
