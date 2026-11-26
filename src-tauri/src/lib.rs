@@ -54,11 +54,12 @@ mod tests {
 }
 
 pub fn run() {
+    let from_autostart = std::env::args().any(|arg| arg == "--from-autostart");
     let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec![]),
+            Some(vec!["--from-autostart"]),
         ))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -79,6 +80,20 @@ pub fn run() {
             commands::hide_window,
         ])
         .setup(move |app| {
+            if !from_autostart {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                }
+            }
+            // [设计意图/根因] -> 旧版本自启项没有 --from-autostart 参数
+            // [理论先验/数学假设] -> 插件 enable 会覆盖同名自启项并写入当前参数
+            // [机制闭环解释] -> 已开启自启的用户升级后自动获得静默启动，无需手动开关
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                if app.autolaunch().is_enabled().unwrap_or(false) {
+                    let _ = app.autolaunch().enable();
+                }
+            }
             state::start_worker(app.handle().clone(), shared)?;
             tray::create_tray(app.handle())?;
             Ok(())

@@ -1,6 +1,6 @@
 [package]
 name = "tyut-keepalive"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 description = "TYUT campus network auto-login (Tauri desktop)"
 
