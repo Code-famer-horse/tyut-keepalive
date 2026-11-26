@@ -1,8 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
 const $ = (id) => document.getElementById(id);
 const notice = (text) => { $("notice").textContent = text; };
+
+const tauri = window.__TAURI__;
+if (!tauri?.core?.invoke || !tauri?.event?.listen) {
+  notice("Tauri API 未就绪，请重启应用");
+  throw new Error("Tauri global API unavailable");
+}
+const invoke = tauri.core.invoke;
+const listen = tauri.event.listen;
 
 function render(status) {
   $("state").textContent = status.state || "-";

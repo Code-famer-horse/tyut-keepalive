@@ -1,9 +1,13 @@
 from html.parser import HTMLParser
 from pathlib import Path
+import json
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGET = ROOT / "dist" / "index.html"
+SCRIPT = ROOT / "dist" / "main.js"
+CONFIG = ROOT / "src-tauri" / "tauri.conf.json"
 VOID = {"meta", "link", "input", "br", "img", "hr", "source", "area", "base", "col", "embed", "param", "track", "wbr"}
 REQUIRED_IDS = [
     "state", "account", "lastCheck", "lastLogin", "message",
@@ -74,6 +78,24 @@ def main():
     missing = [i for i in REQUIRED_IDS if i not in checker.ids]
     if missing:
         errors.append(f"缺少 id：{missing}")
+
+    if SCRIPT.exists():
+        js = SCRIPT.read_text(encoding="utf-8")
+        # 没有打包器时，裸模块说明符无法在 WebView 中解析。
+        bare = re.findall(r'\bfrom\s+["\'](@tauri-apps/[^"\']+)["\']', js)
+        if bare:
+            errors.append(f"main.js 含未打包的裸模块导入：{bare}")
+        if "window.__TAURI__" not in js:
+            errors.append("main.js 未使用 window.__TAURI__ 全局 API")
+    else:
+        errors.append(f"缺少 {SCRIPT}")
+
+    if CONFIG.exists():
+        config = json.loads(CONFIG.read_text(encoding="utf-8"))
+        if config.get("app", {}).get("withGlobalTauri") is not True:
+            errors.append("tauri.conf.json 缺少 app.withGlobalTauri: true")
+    else:
+        errors.append(f"缺少 {CONFIG}")
 
     if errors:
         print("HTML 校验失败：")
