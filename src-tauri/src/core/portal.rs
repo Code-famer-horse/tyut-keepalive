@@ -99,7 +99,7 @@ fn portal_ip(client: &Client) -> Result<Option<Ipv4Addr>> {
             None => break,
         };
         url = url.join(&location)?;
-        log(format!("Portal 重定向到：{url}"));
+        log("Portal 收到重定向响应");
         response = client
             .get(url.clone())
             .timeout(Duration::from_secs(10))
@@ -122,7 +122,7 @@ fn portal_ip(client: &Client) -> Result<Option<Ipv4Addr>> {
             .and_then(|capture| capture.get(1))
             .and_then(|matched| matched.as_str().parse::<Ipv4Addr>().ok())
         {
-            log(format!("Portal 提取到 IP：{ip}"));
+            log("Portal 提取到客户端 IP");
             return Ok(Some(ip));
         }
     }
@@ -167,7 +167,8 @@ fn load_config(client: &Client, ip: Ipv4Addr, mac: &str) -> Result<()> {
         .headers(protocol_headers())
         .query(&params)
         .timeout(Duration::from_secs(15))
-        .send()?;
+        .send()
+        .map_err(|error| error.without_url())?;
     let status = response.status();
     if !status.is_success() {
         bail!("loadConfig 返回 HTTP {status}");
@@ -227,7 +228,8 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<Log
         .headers(protocol_headers())
         .query(&params)
         .timeout(Duration::from_secs(15))
-        .send()?;
+        .send()
+        .map_err(|error| error.without_url())?;
     let status = response.status();
     let body = response.text()?;
     if !status.is_success() {
@@ -248,7 +250,7 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
         Some(mac) => mac.to_owned(),
         None => local_mac(ip)?,
     };
-    log(format!("本机 IP：{ip}，MAC：{mac}"));
+    log("已获取本机网络接口信息");
     let resolved_ips = match campus_host_ips() {
         Ok(ips) => Some(ips),
         Err(error) => {
@@ -258,7 +260,7 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
     };
     let client = client(resolved_ips)?;
     let user_ip = portal_ip(&client)?.unwrap_or(ip);
-    log(format!("最终使用 IP：{user_ip}"));
+    log("已确定认证使用的客户端 IP");
     load_config(&client, user_ip, &mac)?;
     thread::sleep(Duration::from_millis(500));
     let outcome = login(&client, user_ip, credentials)?;

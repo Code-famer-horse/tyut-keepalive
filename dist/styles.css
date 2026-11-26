@@ -16,6 +16,7 @@ button { padding: 8px 12px; border: 1px solid #94a3b8; border-radius: 6px; backg
 button:hover { background: #eef2ff; }
 .danger { color: #b91c1c; border-color: #fca5a5; }
 .credentials { display: grid; gap: 8px; margin-top: 12px; padding: 12px; background: #fff; border-radius: 8px; }
+.credentials[hidden] { display: none; }
 .credentials label { display: grid; gap: 4px; }
 input { padding: 8px; border: 1px solid #94a3b8; border-radius: 6px; }
 #notice { min-height: 1.4em; color: #059669; }
