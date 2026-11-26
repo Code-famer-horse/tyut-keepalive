@@ -1,5 +1,7 @@
 """Generate a visibly marked test frontend; never modify the production dist."""
+import argparse
 import json
+import tomllib
 from pathlib import Path
 import shutil
 import uuid
@@ -9,7 +11,34 @@ def require(condition, message):
     if not condition:
         raise SystemExit("Test build safety check failed: " + message)
 
+def isolate_linux_package(manifest_text, lock_text):
+    """Change only the workspace root package identity in a disposable checkout."""
+    old = "tyut-keepalive"
+    new = "tyut-keepalive-test"
+    manifest = tomllib.loads(manifest_text)
+    lock = tomllib.loads(lock_text)
+    require(manifest["package"]["name"] == old, "unexpected Cargo package identity")
+    require(manifest["lib"]["name"] == "tyut_keepalive_lib", "unexpected library identity")
+    root = [p for p in lock["package"] if p["name"] == old and "source" not in p]
+    require(len(root) == 1 and root[0]["version"] == manifest["package"]["version"], "unexpected Cargo.lock root package")
+    require(not any(p["name"] == new for p in lock["package"]), "test package already exists")
+    # Exact single replacement: never resolve or upgrade a third-party dependency.
+    anchor = f'name = "{old}"'
+    replacement = f'name = "{new}"'
+    require(manifest_text.count(anchor) == lock_text.count(anchor) == 1, "ambiguous package name replacement")
+    changed_manifest = manifest_text.replace(anchor, replacement, 1)
+    changed_lock = lock_text.replace(anchor, replacement, 1)
+    manifest["package"]["name"] = new
+    root[0]["name"] = new
+    require(tomllib.loads(changed_manifest) == manifest, "unexpected Cargo manifest change")
+    require(tomllib.loads(changed_lock) == lock, "unexpected dependency change")
+    return changed_manifest, changed_lock
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--linux-package-identity", action="store_true",
+                        help="rename root Cargo package in disposable Linux test checkout")
+    args = parser.parse_args()
     base = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
     test = json.loads((ROOT / "src-tauri/tauri.test.conf.json").read_text(encoding="utf-8"))
     require(base["identifier"] == "com.tyut.keepalive", "unexpected production identifier")
@@ -39,6 +68,14 @@ def main():
     anchor = "签名更新未启用：尚未配置可信公钥"
     require(anchor in source, "update status anchor missing")
     main_js.write_text(source.replace(anchor, "独立测试版：自动更新已禁用"), encoding="utf-8")
+    if args.linux_package_identity:
+        cargo = ROOT / "src-tauri/Cargo.toml"
+        lock = ROOT / "src-tauri/Cargo.lock"
+        manifest_text, lock_text = isolate_linux_package(
+            cargo.read_text(encoding="utf-8"), lock.read_text(encoding="utf-8"))
+        cargo.write_text(manifest_text, encoding="utf-8")
+        lock.write_text(lock_text, encoding="utf-8")
+        print("Linux test checkout uses independent Cargo binary identity; dependency records unchanged")
     print("Isolated test configuration and frontend prepared")
 
 if __name__ == "__main__":

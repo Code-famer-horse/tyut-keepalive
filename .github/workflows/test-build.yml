@@ -7,6 +7,7 @@ on:
       - 'src-tauri/tauri.test.conf.json'
       - 'scripts/prepare_test_build.py'
       - 'scripts/collect_test_artifacts.py'
+      - 'scripts/test_test_artifacts.py'
   workflow_dispatch:
 
 permissions:
@@ -65,11 +66,20 @@ jobs:
           key: independent-test-${{ matrix.target }}
       - name: Install locked frontend tools
         run: npm ci
-      - name: Verify production security and prepare isolated frontend
+      - name: Verify production security and artifact checks
         run: |
           python scripts/check_security.py
-          python scripts/prepare_test_build.py
+          python scripts/test_test_artifacts.py
+      - name: Prepare isolated Windows frontend
+        if: runner.os == 'Windows'
+        run: python scripts/prepare_test_build.py
+      - name: Prepare isolated Linux frontend and Cargo identity
+        if: runner.os == 'Linux'
+        run: python scripts/prepare_test_build.py --linux-package-identity
+      - name: Verify prepared test inputs
+        run: |
           node --check dist-test/main.js
+          cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Check test feature
         run: cargo test --manifest-path src-tauri/Cargo.toml --features test-build --locked
       - name: Build unsigned independent test installers

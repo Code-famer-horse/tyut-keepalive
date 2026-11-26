@@ -3,14 +3,42 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 def require(condition, message):
     if not condition:
         raise SystemExit("Test artifact check failed: " + message)
+
+def verify_deb_members(archive):
+    """Inspect exact archive paths, not locale-dependent dpkg -c text."""
+    executable = "usr/bin/tyut-keepalive-test"
+    production = "usr/bin/tyut-keepalive"
+    matches = []
+    production_paths = []
+    for member in archive:
+        path = PurePosixPath(member.name).as_posix()
+        if path.startswith("usr/bin/") or path.startswith("./usr/bin/"):
+            print(f"DEB executable entry: {path} (mode {member.mode:o})")
+        if path == executable:
+            matches.append(member.isfile() and bool(member.mode & 0o111))
+        if path == production:
+            production_paths.append(path)
+    require(not production_paths, "DEB contains production executable path")
+    require(matches == [True], "DEB must contain exactly one regular executable at usr/bin/tyut-keepalive-test")
+
+def verify_deb(package):
+    name = subprocess.check_output(["dpkg-deb", "-f", str(package), "Package"], text=True).strip()
+    require(name == "tyut-keepalive-test", "unexpected Debian package name: " + name)
+    # Stream the filesystem archive without extracting files or executing the package.
+    with subprocess.Popen(["dpkg-deb", "--fsys-tarfile", str(package)], stdout=subprocess.PIPE) as proc:
+        with tarfile.open(fileobj=proc.stdout, mode="r|") as archive:
+            verify_deb_members(archive)
+        proc.stdout.read()
+        require(proc.wait() == 0, "dpkg-deb filesystem archive read failed")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -31,10 +59,7 @@ def main():
         require(package.is_file() and package.stat().st_size > 0, "empty package")
         require("test" in package.name.lower(), "installer filename lacks test marker")
         if directory == "deb":
-            name = subprocess.check_output(["dpkg-deb", "-f", str(package), "Package"], text=True).strip()
-            require(name == "tyut-keepalive-test", "unexpected Debian package name: " + name)
-            listing = subprocess.check_output(["dpkg-deb", "-c", str(package)], text=True)
-            require("./usr/bin/tyut-keepalive-test" in listing, "test binary missing from DEB")
+            verify_deb(package)
         target = out / package.name
         shutil.copy2(package, target)
         files.append(target)
