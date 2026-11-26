@@ -1,3 +1,6 @@
+mod core;
+use crate::core::{config, dns};
+
 pub(crate) const PORTAL_URL: &str = "http://219.226.127.250";
 pub(crate) const LOGIN_HOST: &str = "https://drcom.tyut.edu.cn:804";
 pub(crate) const LOGIN_DOMAIN: &str = "drcom.tyut.edu.cn";
