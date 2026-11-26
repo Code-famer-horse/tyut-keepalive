@@ -43,6 +43,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Check frontend HTML
+        run: npm run check:html
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
