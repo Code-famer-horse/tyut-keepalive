@@ -1137,13 +1137,14 @@ jobs:
         run: npm install
 
       - name: Build and publish
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'TYUT Keepalive ${{ github.ref_name }}'
-          releaseBody: 'Tauri 2 三平台桌面版：开机自启、后台留存、托盘控制。'
+          releaseName: 'TYUT Keepalive v__VERSION__（Windows / macOS / Linux）'
+          releaseBody: 'Tauri 2 三平台桌面版：开机自启、后台静默驻留托盘、单实例、响应式界面。按对应平台下载资产。'
+          releaseAssetNamePattern: 'TYUT-Keepalive-v[version]-[platform]-[arch][ext]'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
