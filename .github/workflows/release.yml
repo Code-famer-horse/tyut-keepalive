@@ -9,51 +9,48 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            binary: tyut-keepalive.exe
-            asset: tyut-keepalive-windows-x86_64.exe
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            binary: tyut-keepalive
-            asset: tyut-keepalive-linux-x86_64
-    runs-on: ${{ matrix.os }}
+          - platform: windows-latest
+            args: --windows --bundles msi
+          - platform: macos-latest
+            args: --macos --bundles dmg
+          - platform: ubuntu-latest
+            args: --linux --bundles deb,appimage
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-      - name: Stage asset
-        shell: bash
-        run: |
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/${{ matrix.asset }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset }}
-          path: dist/${{ matrix.asset }}
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
         with:
-          path: dist
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+          node-version: 24
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: |
-            dist/tyut-keepalive-windows-x86_64.exe
-            dist/tyut-keepalive-linux-x86_64
-          generate_release_notes: true
+          tagName: ${{ github.ref_name }}
+          releaseName: 'TYUT Keepalive ${{ github.ref_name }}'
+          releaseBody: 'Tauri 2 三平台桌面版：开机自启、后台留存、托盘控制。'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
