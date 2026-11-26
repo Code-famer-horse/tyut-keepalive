@@ -6,17 +6,48 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, ubuntu-latest]
+    uses: ./.github/workflows/platform-checks.yml
+    with:
+      os: ${{ matrix.os }}
+
+  prepare:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create or reuse draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if draft=$(gh release view "$TAG" --json isDraft --jq '.isDraft'); then
+            test "$draft" = true || { echo "Release already published; refusing to modify it"; exit 1; }
+          else
+            gh release create "$TAG" --verify-tag --draft --title "TYUT Keepalive $TAG" --notes "Windows / macOS / Linux desktop release"
+          fi
+
   release:
+    needs: prepare
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: windows-latest
             args: --bundles msi
-          - platform: macos-latest
+          - platform: macos-15
             args: --bundles dmg
           - platform: ubuntu-latest
             args: --bundles deb,appimage
@@ -46,7 +77,7 @@ jobs:
       - name: Check frontend HTML
         run: npm run check:html
 
-      - name: Build and publish
+      - name: Build and upload to draft
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,6 +86,19 @@ jobs:
           releaseName: 'TYUT Keepalive v__VERSION__（Windows / macOS / Linux）'
           releaseBody: 'Tauri 2 三平台桌面版：开机自启、后台静默驻留托盘、单实例、响应式界面。按对应平台下载资产。'
           releaseAssetNamePattern: 'TYUT-Keepalive-v[version]-[platform]-[arch][ext]'
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} -- --locked
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish only after all platform builds succeed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --draft=false
