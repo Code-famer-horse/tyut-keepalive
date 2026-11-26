@@ -18,3 +18,4 @@ tyut-keepalive-rs-tmux-psmux.zip
 !/target/release/
 /target/release/*
 !/target/release/tyut-keepalive
+node_modules/
