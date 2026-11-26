@@ -4,6 +4,8 @@ mod state;
 mod tray;
 use crate::core::{config, dns};
 
+pub(crate) type SharedStatus = state::SharedStatus;
+
 pub(crate) const PORTAL_URL: &str = "http://219.226.127.250";
 pub(crate) const LOGIN_HOST: &str = "https://drcom.tyut.edu.cn:804";
 pub(crate) const LOGIN_DOMAIN: &str = "drcom.tyut.edu.cn";
@@ -22,11 +24,20 @@ pub(crate) fn log(message: impl AsRef<str>) {
 
 #[cfg(test)]
 mod tests {
+    use crate::state::Status;
+
     #[test]
-    fn status_default_is_empty() {
-        let status = crate::state::Status::default();
-        assert!(status.state.is_empty());
-        assert!(status.account.is_empty());
+    fn status_serializes_camel_case() {
+        let status = Status {
+            state: "online".into(),
+            account: "d****03".into(),
+            last_check: "2026-11-26 15:00:00".into(),
+            last_login: "尚未登录".into(),
+            message: "网络正常".into(),
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"lastCheck\""));
+        assert!(json.contains("\"lastLogin\""));
     }
 
     #[test]
@@ -42,7 +53,25 @@ mod tests {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
+    let app = tauri::Builder::default()
+        .manage(shared.clone())
+        .invoke_handler(tauri::generate_handler![
+            commands::get_status,
+            commands::reconnect,
+            commands::reset_credentials,
+            commands::setup_credentials,
+            commands::set_autostart,
+            commands::is_autostart,
+            commands::quit,
+            commands::show_window,
+            commands::hide_window,
+        ])
+        .setup(move |app| {
+            state::start_worker(app.handle().clone(), shared)?;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");
+    let _ = app;
 }
