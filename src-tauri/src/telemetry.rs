@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Mutex,
     time::Instant,
@@ -104,15 +104,26 @@ fn append_row(dir: &Path, row: &Row) -> std::io::Result<()> {
     if bytes.len() as u64 > FILE_BUDGET {
         return Err(std::io::Error::other("event exceeds disk budget"));
     }
-    if length.saturating_add(bytes.len() as u64) > FILE_BUDGET {
+    // Reserve one byte for a possible separator after a torn final write.
+    let mut rotated = false;
+    if length.saturating_add(bytes.len() as u64).saturating_add(1) > FILE_BUDGET {
         match fs::remove_file(&backup) {
             Ok(()) => (),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
             Err(e) => return Err(e),
         }
         fs::rename(&current, &backup)?;
+        rotated = true;
     }
+    let needs_separator = if length > 0 && !rotated {
+        let mut reader = fs::File::open(&current)?;
+        reader.seek(SeekFrom::End(-1))?;
+        let mut last = [0_u8];
+        reader.read_exact(&mut last)?;
+        last[0] != b'\n'
+    } else { false };
     let mut file = private_open(&current, true)?;
+    if needs_separator { file.write_all(b"\n")?; }
     file.write_all(&bytes)?;
     file.sync_data()
 }
@@ -179,7 +190,7 @@ impl Journal {
             _ => None,
         };
         if online {
-            if self.last_observation != Some(true) { self.online_since = Some(Instant::now()); }
+            if self.online_since.is_none() { self.online_since = Some(Instant::now()); }
             self.invalid_notified = false;
         } else {
             self.online_since = None;
@@ -194,6 +205,11 @@ impl Journal {
     }
     fn state(&mut self, state: ConnectionState, observation: Option<bool>, authenticated: bool) -> Option<Kind> {
         let mut notification = observation.and_then(|value| self.observe(value, authenticated));
+        // An unclassified transport error is unknown, not a proven outage.
+        // End the observed-duration span without fabricating an outage edge.
+        if state == ConnectionState::Offline && observation.is_none() {
+            self.online_since = None;
+        }
         let kind = Kind::from(state);
         if self.last_kind != Some(kind) { self.record(kind); self.last_kind = Some(kind); }
         if state == ConnectionState::InvalidCredentials && !self.invalid_notified {
@@ -313,6 +329,28 @@ mod tests {
         j.state(ConnectionState::LoggingIn, None, false);
         assert_eq!(j.state(ConnectionState::InvalidCredentials, None, false), None);
         assert!(Journal::open(temp.0.clone()).enabled);
+    }
+    #[test]
+    fn unclassified_failure_ends_duration_without_counting_outage() {
+        let temp = Temp::new();
+        let mut j = Journal::open(temp.0.clone());
+        j.observe(true, false);
+        j.state(ConnectionState::Offline, None, false);
+        assert!(j.online_since.is_none());
+        assert_eq!(j.daily.interruptions, 0);
+        j.observe(true, false);
+        assert!(j.online_since.is_some());
+        assert_eq!(j.daily.interruptions, 0);
+    }
+    #[test]
+    fn append_after_torn_line_preserves_new_events() {
+        let temp = Temp::new();
+        let mut j = Journal::open(temp.0.clone());
+        fs::write(temp.0.join("events.jsonl"), b"{\"incomplete\":").unwrap();
+        j.observe(true, true);
+        let recovered = Journal::open(temp.0.clone());
+        assert_eq!(recovered.daily.auth_confirmed, 1);
+        assert!(!recovered.persistence_ok);
     }
     #[test]
     fn rotation_retains_latest_aggregate() {
