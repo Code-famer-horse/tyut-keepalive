@@ -4,7 +4,35 @@ Rust 版校园网自动登录核心，参考 [NoRegret-L/tyut-keepalive](https:/
 
 > 原 Python 版已归档到 `archive/python/`，不参与构建与启动。
 
-## 1. 编译（Windows / Linux）
+## 1. 最傻瓜式使用（Windows）
+
+适用：只想要一个能自动保活的程序，不想编译、不关心终端会话。
+
+1. 在桌面新建文件夹，例如 `D:\AutoNet`。
+2. 从 [v0.1.0 Release](https://github.com/NoRegret-L/tyut-keepalive/releases/tag/v0.1.0) 下载 `tyut-keepalive-windows-x86_64.exe`，放进该文件夹。
+3. 双击 exe。首次会打开命令行窗口，按提示输入校园网账号和密码；程序把混淆后的凭证保存为同目录的 `config.enc`，随后开始前台保活。
+4. 以后直接双击 exe 即可自动读取 `config.enc`，无需再次输入密码。
+
+注意：exe 窗口关闭即停止保活。需要“登录后常驻、不显示窗口”时，安装 psmux 后使用本仓库的 `启动校园网登录.bat`，见第 5 节。`config.enc` 仅作 XOR 混淆，不是安全加密，不要分享。
+
+## 2. 发布版下载与校验
+
+| 项目 | 内容 |
+|---|---|
+| 版本 | v0.1.0 Windows x86_64 |
+| 下载 | https://github.com/NoRegret-L/tyut-keepalive/releases/tag/v0.1.0 |
+| 文件名 | 页面显示 `tyut-keepalive-windows-x86_64.exe` |
+| SHA-256 | `917f1a39d1daff77d650c23b258272a5bcae075581d9fef467e312d15757fd59` |
+
+校验命令（在 exe 所在目录打开 PowerShell）：
+
+```powershell
+Get-FileHash .\tyut-keepalive.exe -Algorithm SHA256
+```
+
+Linux 暂无预编译包，请用第 3 节自行编译。浏览器若把文件保存为 `.exe.zip` 或 `.exe.crdownload`，请先改回 `.exe` 再运行。
+
+## 3. 编译（Windows / Linux）
 
 ```bash
 cargo build --release
@@ -13,7 +41,7 @@ cargo test
 
 编译后：Windows 为 `target\release\tyut-keepalive.exe`，Linux 为 `target/release/tyut-keepalive`。
 
-## 2. 保存凭证（只需首次进行）
+## 4. 保存凭证（只需首次进行）
 
 本方案固定使用项目根目录 `config.enc`，以便与原 Python 项目保持一致。也可以将原版 `config.enc` 放到本目录复用；不要把它上传到 Git。
 
@@ -33,7 +61,7 @@ Linux：
 
 其他参数：`--reset` 删除凭证、`--mac HEX` 手动指定 MAC、`--help` 查看帮助。
 
-## 3. Windows：psmux 会话
+## 5. Windows：psmux 会话
 
 先安装 [psmux](https://github.com/psmux/psmux)，确认 `psmux.exe` 在 `PATH`。
 
@@ -52,7 +80,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Register-AutoNetAutost
 
 复用原计划任务名 `AutoNet校园网自动登录`；已有同名任务时拒绝覆盖。
 
-## 4. Linux：tmux 会话
+## 6. Linux：tmux 会话
 
 ```bash
 bash start-linux.sh
@@ -61,7 +89,7 @@ tmux attach -t autonet
 
 已存在 `autonet` 会话时脚本直接退出。登录 Shell 自启：`bash install-linux-autostart.sh`（检测 `# AutoNet login startup` 标记，不覆盖现有配置）。
 
-## 5. 兼容性与风险
+## 7. 兼容性与风险
 
 | 功能 | Rust + tmux / psmux |
 |---|---|
