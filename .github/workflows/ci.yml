@@ -39,7 +39,7 @@ jobs:
           npm run check:html
           node --check dist/main.js
       - name: Resolve dependencies
-        run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1
+        run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Rust unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Compile release configuration
