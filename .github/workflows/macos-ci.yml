@@ -10,4 +10,3 @@ jobs:
     uses: ./.github/workflows/platform-checks.yml
     with:
       os: macos-15
-      resolve_lock: true
