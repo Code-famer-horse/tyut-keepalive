@@ -173,12 +173,12 @@ fn load_config(client: &Client, ip: Ipv4Addr, mac: &str) -> Result<()> {
     if !status.is_success() {
         bail!("loadConfig 返回 HTTP {status}");
     }
-    let _body = response.text()?;
+    let _body = response.text().map_err(|error| error.without_url())?;
     log("loadConfig 请求完成");
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LoginOutcome {
     Success,
     BadPassword,
@@ -231,7 +231,7 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<Log
         .send()
         .map_err(|error| error.without_url())?;
     let status = response.status();
-    let body = response.text()?;
+    let body = response.text().map_err(|error| error.without_url())?;
     if !status.is_success() {
         bail!("登录接口 HTTP 状态异常：{status}");
     }
@@ -244,7 +244,7 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<Log
     Ok(outcome)
 }
 
-pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str>) -> Result<bool> {
+pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str>) -> Result<LoginOutcome> {
     let ip = local_ip()?;
     let mac = match mac_override {
         Some(mac) => mac.to_owned(),
@@ -265,9 +265,8 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
     thread::sleep(Duration::from_millis(500));
     let outcome = login(&client, user_ip, credentials)?;
     match outcome {
-        LoginOutcome::Success => Ok(true),
-        LoginOutcome::BadPassword => Ok(false),
-        LoginOutcome::Indeterminate => Ok(check_network(&client)),
+        LoginOutcome::Indeterminate if check_network(&client) => Ok(LoginOutcome::Success),
+        other => Ok(other),
     }
 }
 

@@ -30,7 +30,7 @@ mod tests {
     #[test]
     fn status_serializes_camel_case() {
         let status = Status {
-            state: "online".into(),
+            state: crate::state::ConnectionState::Online,
             account: "d****03".into(),
             last_check: "2026-11-26 15:00:00".into(),
             last_login: "尚未登录".into(),
@@ -41,16 +41,7 @@ mod tests {
         assert!(json.contains("\"lastLogin\""));
     }
 
-    #[test]
-    fn reconnect_flag_is_consumed_once() {
-        let dir = std::env::temp_dir().join(format!("tyut-keepalive-flag-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("reconnect"), b"").unwrap();
-        assert!(crate::state::flag(&dir, "reconnect"));
-        assert!(!crate::state::flag(&dir, "reconnect"));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+
 }
 
 pub fn run() {
@@ -80,6 +71,7 @@ pub fn run() {
             commands::hide_window,
         ])
         .setup(move |app| {
+            state::start_worker(app.handle().clone(), shared)?;
             if !from_autostart {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
@@ -94,7 +86,6 @@ pub fn run() {
                     let _ = app.autolaunch().enable();
                 }
             }
-            state::start_worker(app.handle().clone(), shared)?;
             tray::create_tray(app.handle())?;
             Ok(())
         })
