@@ -14,4 +14,3 @@ jobs:
     uses: ./.github/workflows/platform-checks.yml
     with:
       os: ${{ matrix.os }}
-      resolve_lock: true
