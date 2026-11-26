@@ -52,9 +52,10 @@
         </div>
         <div class="actions">
           <button id="reconnect" class="primary" type="button" disabled>立即重连</button>
+          <button id="pauseToggle" type="button" disabled>暂停保活</button>
           <button id="setup" type="button">连接设置</button>
         </div>
-        <p class="footnote">隐藏窗口不会停止后台保活；彻底退出才会结束服务。</p>
+        <p class="footnote">暂停仅影响本次运行，不主动注销网络；隐藏窗口不会停止后台服务。休眠或网络变化后先重新检查，暂停状态不会被自动解除。</p>
       </section>
       <section id="page-logs" aria-labelledby="logsTitle" hidden>
         <div class="section-heading"><h2 id="logsTitle">运行记录</h2><button id="refreshHistory" class="quiet" type="button">刷新记录</button></div>
@@ -91,7 +92,7 @@
           <form id="credentials">
             <label class="field" for="accountInput">账号<input id="accountInput" autocomplete="username" required /></label>
             <label class="field" for="passwordInput">密码<input id="passwordInput" type="password" autocomplete="current-password" required /></label>
-            <button id="saveCredentials" class="primary" type="submit" disabled>保存并认证</button>
+            <button id="saveCredentials" class="primary" type="submit" disabled>保存凭据</button>
           </form>
           <div class="setting-row danger-row"><div><strong>清除本机凭据</strong><span class="muted">停止自动认证，不主动注销当前网络</span></div><button id="reset" class="danger" type="button" disabled>清除凭据</button></div>
         </article>

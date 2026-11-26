@@ -5,7 +5,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 use crate::core::{config, credentials, portal};
 
 const WATCH_INTERVAL: Duration = Duration::from_secs(600);
@@ -24,6 +24,8 @@ pub(crate) enum ConnectionState {
     Online,
     Offline,
     InvalidCredentials,
+    Paused,
+    Suspended,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -34,6 +36,8 @@ pub(crate) struct Status {
     pub(crate) last_check: String,
     pub(crate) last_login: String,
     pub(crate) message: String,
+    pub(crate) paused: bool,
+    pub(crate) sleeping: bool,
 }
 
 pub(crate) type SharedStatus = Arc<Mutex<Status>>;
@@ -53,6 +57,10 @@ pub(crate) enum Outcome {
 }
 pub(crate) enum Event {
     Reconnect,
+    SetPaused(bool, Option<Reply>),
+    Suspend,
+    Wake,
+    NetworkChanged,
     Save(config::Credentials, Reply),
     Clear(Reply),
     Finished { generation: u64, task: Task, outcome: Outcome },
@@ -65,6 +73,45 @@ impl Scheduler {
     }
 }
 
+// Orthogonal policy gates: a wake or topology change must never lift user pause
+// or the credential-error latch. Explicit reconnect may retry a bad password.
+#[derive(Default)]
+struct Gate {
+    paused: bool,
+    sleeping: bool,
+    invalid: bool,
+}
+impl Gate {
+    fn automatic(&self, has_credentials: bool) -> bool {
+        has_credentials && !self.paused && !self.sleeping && !self.invalid
+    }
+    fn manual(&self, has_credentials: bool) -> bool {
+        has_credentials && !self.paused && !self.sleeping
+    }
+}
+fn invalidate(generation: &mut u64, cancellation: &Option<Arc<AtomicBool>>) {
+    if let Some(flag) = cancellation { flag.store(true, Ordering::Release); }
+    *generation = generation.wrapping_add(1);
+}
+fn publish_gate(app: &AppHandle, shared: &SharedStatus, status: &mut Status,
+                gate: &Gate, idle: ConnectionState, has_credentials: bool) {
+    status.paused = gate.paused;
+    status.sleeping = gate.sleeping;
+    let (state, message) = if gate.paused {
+        (ConnectionState::Paused, "自动保活已暂停，不会主动注销网络")
+    } else if gate.sleeping {
+        (ConnectionState::Suspended, "系统休眠，等待唤醒")
+    } else if gate.invalid {
+        (ConnectionState::InvalidCredentials, "密码错误，请更新凭据或手动重连")
+    } else if !has_credentials && idle == ConnectionState::CredentialError {
+        (ConnectionState::CredentialError, "凭据存储异常，请检查设置")
+    } else if !has_credentials {
+        (ConnectionState::NeedSetup, "请设置账号密码")
+    } else {
+        (ConnectionState::Checking, "等待重新检查网络")
+    };
+    publish(app, shared, status, state, message);
+}
 fn now() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
@@ -81,7 +128,7 @@ fn publish_observed(app: &AppHandle, shared: &SharedStatus, status: &mut Status,
     }
     let _ = app.emit("status", status.clone());
     crate::telemetry::on_state(app, state, observation, authenticated);
-    crate::tray::update(app, state);
+    crate::tray::update(app, status);
 }
 
 fn due(task: Task, delay: Duration) -> Option<(Instant, Task)> {
@@ -126,7 +173,27 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
     let legacy = dir.join("config.enc");
     let (tx, rx) = mpsc::channel();
     app.manage(Scheduler(tx.clone()));
+    // Listen in Rust, independent of the WebView and its visibility.
+    let suspend_tx = tx.clone();
+    app.listen("power-monitor://suspend", move |_| { let _ = suspend_tx.send(Event::Suspend); });
+    let wake_tx = tx.clone();
+    app.listen("power-monitor://resume", move |_| { let _ = wake_tx.send(Event::Wake); });
     thread::spawn(move || {
+        // The handle must live for the lifetime of the worker. No raw address
+        // or interface metadata is copied to logs, IPC, or the network.
+        let network_pending = Arc::new(AtomicBool::new(false));
+        let callback_pending = network_pending.clone();
+        let network_tx = tx.clone();
+        let _watch = match netwatcher::watch_interfaces_with_callback(move |update| {
+            if !update.is_initial && !callback_pending.swap(true, Ordering::AcqRel) {
+                if network_tx.send(Event::NetworkChanged).is_err() {
+                    callback_pending.store(false, Ordering::Release);
+                }
+            }
+        }) {
+            Ok(handle) => Some(handle),
+            Err(_) => { crate::log("网络事件监听不可用，保留定时检查"); None }
+        };
         let mut status = Status {
             account: "未配置".into(),
             last_login: "尚未登录".into(),
@@ -139,6 +206,10 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 None
             }
         };
+        let mut gate = Gate::default();
+        let mut idle = if status.state == ConnectionState::CredentialError {
+            ConnectionState::CredentialError
+        } else { ConnectionState::NeedSetup };
         let mut generation = 0_u64;
         let mut retry = RETRY_INITIAL;
         let mut running: Option<(u64, Task)> = None;
@@ -158,6 +229,8 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 Err(RecvTimeoutError::Disconnected) => break,
                 Err(RecvTimeoutError::Timeout) => {
                     let Some((_, task)) = next.take() else { continue; };
+                    // Last gate check at dispatch: no timer or recovery event may bypass pause.
+                    if !gate.manual(active.is_some()) || (gate.invalid && task != Task::Login) { continue; }
                     let Some(value) = active.clone() else { continue; };
                     running = Some((generation, task));
                     status.last_check = now();
@@ -172,19 +245,63 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     launch(tx.clone(), generation, task, value, cancelled);
                 }
                 Ok(Event::Reconnect) => {
-                    if active.is_none() {
-                        // A failed reset must not reload a still-present old credential.
-                        if status.state != ConnectionState::CredentialError {
-                            publish(&app, &shared, &mut status, ConnectionState::NeedSetup, "请先设置凭据");
-                        }
-                    } else if running != Some((generation, Task::Login)) {
+                    if !gate.manual(active.is_some()) {
+                        continue;
+                    }
+                    if running != Some((generation, Task::Login)) {
+                        // Only explicit reconnect is allowed to retry rejected credentials.
+                        invalidate(&mut generation, &cancellation);
                         next = due(Task::Login, Duration::ZERO);
                     }
                 }
+                Ok(Event::SetPaused(paused, reply)) => {
+                    if gate.paused != paused {
+                        gate.paused = paused;
+                        invalidate(&mut generation, &cancellation);
+                        next = None;
+                        if !paused && gate.automatic(active.is_some()) {
+                            retry = RETRY_INITIAL;
+                            next = due(Task::Check, Duration::ZERO);
+                        }
+                        publish_gate(&app, &shared, &mut status, &gate, idle, active.is_some());
+                    }
+                    if let Some(reply) = reply { let _ = reply.send(Ok(())); }
+                }
+                Ok(Event::Suspend) => {
+                    if gate.sleeping { continue; }
+                    gate.sleeping = true;
+                    invalidate(&mut generation, &cancellation);
+                    next = None;
+                    crate::telemetry::context_changed(&app, crate::telemetry::Kind::SystemSuspended);
+                    publish_gate(&app, &shared, &mut status, &gate, idle, active.is_some());
+                }
+                Ok(Event::Wake) => {
+                    // Accept wake even when the platform missed the preceding suspend.
+                    gate.sleeping = false;
+                    invalidate(&mut generation, &cancellation);
+                    next = None;
+                    crate::telemetry::context_changed(&app, crate::telemetry::Kind::SystemResumed);
+                    if gate.automatic(active.is_some()) {
+                        retry = RETRY_INITIAL;
+                        next = due(Task::Check, Duration::ZERO);
+                    }
+                    publish_gate(&app, &shared, &mut status, &gate, idle, active.is_some());
+                }
+                Ok(Event::NetworkChanged) => {
+                    network_pending.store(false, Ordering::Release);
+                    if !gate.automatic(active.is_some()) { continue; }
+                    // Coalesce changes while a replacement check is already queued.
+                    if matches!(next, Some((at, Task::Check)) if at <= Instant::now()) { continue; }
+                    invalidate(&mut generation, &cancellation);
+                    retry = RETRY_INITIAL;
+                    next = due(Task::Check, Duration::ZERO);
+                    crate::telemetry::context_changed(&app, crate::telemetry::Kind::NetworkChanged);
+                    publish(&app, &shared, &mut status, ConnectionState::Checking, "网络接口变化，重新检查");
+                }
                 Ok(Event::Save(value, reply)) => {
                     // Invalidate results from prior credentials before touching storage.
-                    if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
-                    generation = generation.wrapping_add(1);
+                    invalidate(&mut generation, &cancellation);
+                    gate.invalid = false;
                     crate::telemetry::credentials_changed(&app);
                     active = None;
                     next = None;
@@ -197,16 +314,24 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                         Ok(()) => {
                             status.account = config::masked_account(&value.account);
                             active = Some(value);
-                            next = due(Task::Login, Duration::ZERO);
-                            publish(&app, &shared, &mut status, ConnectionState::Checking, "凭据已保存，等待认证");
+                            idle = ConnectionState::NeedSetup;
+                            if gate.automatic(active.is_some()) {
+                                next = due(Task::Login, Duration::ZERO);
+                                publish(&app, &shared, &mut status, ConnectionState::Checking, "凭据已保存，等待认证");
+                            } else {
+                                publish_gate(&app, &shared, &mut status, &gate, idle, true);
+                            }
                         }
-                        Err(error) => publish(&app, &shared, &mut status, ConnectionState::CredentialError, error.clone()),
+                        Err(_) => {
+                            idle = ConnectionState::CredentialError;
+                            publish_gate(&app, &shared, &mut status, &gate, idle, false);
+                        }
                     }
                     let _ = reply.send(result);
                 }
                 Ok(Event::Clear(reply)) => {
-                    if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
-                    generation = generation.wrapping_add(1);
+                    invalidate(&mut generation, &cancellation);
+                    gate.invalid = false;
                     crate::telemetry::credentials_changed(&app);
                     active = None;
                     next = None;
@@ -215,10 +340,8 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     status.last_login = "尚未登录".into();
                     status.last_check.clear();
                     let result = credentials::clear(&legacy).map_err(|error| error.to_string());
-                    match &result {
-                        Ok(()) => publish(&app, &shared, &mut status, ConnectionState::NeedSetup, "凭据已清除"),
-                        Err(error) => publish(&app, &shared, &mut status, ConnectionState::CredentialError, error.clone()),
-                    }
+                    idle = if result.is_ok() { ConnectionState::NeedSetup } else { ConnectionState::CredentialError };
+                    publish_gate(&app, &shared, &mut status, &gate, idle, false);
                     let _ = reply.send(result);
                 }
                 Ok(Event::Finished { generation: completed, task, outcome }) => {
@@ -226,20 +349,27 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     running = None;
                     cancellation = None;
                     // A new credential or queued manual action supersedes an old result.
-                    if !current_result(completed, generation, next.is_some()) { continue; }
+                    if !current_result(completed, generation, next.is_some()) || !gate.manual(active.is_some()) { continue; }
                     status.last_check = now();
                     match outcome {
                         Outcome::Checked(true) | Outcome::Authenticated(portal::LoginOutcome::Success) => {
+                            gate.invalid = false;
                             if matches!(outcome, Outcome::Authenticated(_)) { status.last_login = now(); }
                             retry = RETRY_INITIAL;
                             next = due(Task::Check, WATCH_INTERVAL);
                             publish_observed(&app, &shared, &mut status, ConnectionState::Online, "网络正常，10 分钟后复查", Some(true), matches!(outcome, Outcome::Authenticated(portal::LoginOutcome::Success)));
                         }
                         Outcome::Authenticated(portal::LoginOutcome::BadPassword) => {
+                            gate.invalid = true;
                             next = None;
                             publish(&app, &shared, &mut status, ConnectionState::InvalidCredentials, "密码错误，自动重试已停止，请更新凭据");
                         }
                         other => {
+                            // Failed explicit retry of a rejected password stays latched.
+                            if gate.invalid {
+                                publish_gate(&app, &shared, &mut status, &gate, idle, true);
+                                continue;
+                            }
                             if !matches!(other, Outcome::Checked(false)) {
                                 retry = (retry * 2).min(RETRY_MAX);
                             }
@@ -274,6 +404,31 @@ mod tests {
         assert!(!current_result(1, 2, false));
         assert!(!current_result(2, 2, true));
         assert!(current_result(2, 2, false));
+    }
+    #[test]
+    fn pause_sleep_and_invalid_credentials_are_independent_gates() {
+        let mut gate = Gate::default();
+        assert!(gate.automatic(true));
+        assert!(!gate.automatic(false));
+        gate.paused = true;
+        gate.sleeping = true;
+        gate.sleeping = false; // wake does not resume user pause
+        assert!(!gate.automatic(true));
+        assert!(!gate.manual(true));
+        gate.invalid = true;
+        gate.paused = false;
+        assert!(!gate.automatic(true));
+        assert!(gate.manual(true));
+        gate.sleeping = true;
+        assert!(!gate.manual(true));
+    }
+    #[test]
+    fn invalidate_cancels_inflight_and_rejects_old_result() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let mut generation = 1;
+        invalidate(&mut generation, &Some(flag.clone()));
+        assert!(flag.load(Ordering::Acquire));
+        assert!(!current_result(1, generation, false));
     }
     #[test]
     fn no_deadline_waits_for_command() {

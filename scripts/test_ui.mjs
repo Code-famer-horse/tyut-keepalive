@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeTheme, readTheme, saveTheme, describeState, addHistory, HISTORY_LIMIT } from "../dist/ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState, addHistory, HISTORY_LIMIT, keepaliveControls } from "../dist/ui-state.js";
 
 test("theme supports three modes and handles corrupt preferences", () => {
   for (const theme of ["system", "light", "dark"]) assert.equal(normalizeTheme(theme), theme);
@@ -32,4 +32,15 @@ test("UI history records actual transitions, deduplicates and bounds memory", ()
   for (let i = 0; i <= HISTORY_LIMIT; i++) history = addHistory(history, { state: "offline", message: String(i) }, timestamp);
   assert.equal(history.length, HISTORY_LIMIT);
   assert.equal(history[0].message, String(HISTORY_LIMIT));
+});
+
+test("pause and sleep block reconnect, explicit password retry remains available", () => {
+  assert.equal(keepaliveControls(null).reconnect, false);
+  assert.equal(keepaliveControls({state:"online",paused:true}).reconnect, false);
+  assert.equal(keepaliveControls({state:"online",sleeping:true}).reconnect, false);
+  assert.equal(keepaliveControls({state:"invalid-credentials"}).reconnect, true);
+  assert.equal(keepaliveControls({state:"credential-error"}).reconnect, false);
+  assert.equal(keepaliveControls({state:"online"}).reconnect, true);
+  assert.equal(keepaliveControls({state:"paused",paused:true}).paused, true);
+  assert.notEqual(describeState("suspended")[0], "未知状态");
 });

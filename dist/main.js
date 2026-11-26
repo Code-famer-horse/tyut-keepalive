@@ -1,4 +1,4 @@
-import { normalizeTheme, readTheme, saveTheme, describeState } from "./ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState, keepaliveControls } from "./ui-state.js";
 const $ = id => document.getElementById(id);
 const pages = ["overview", "logs", "settings", "about"];
 const controls = ["reconnect", "saveCredentials", "reset", "autostart", "hide", "quit"];
@@ -6,6 +6,7 @@ const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
 const listen = tauri?.event?.listen;
 let ready = false;
+let currentStatus = null;
 let autostartKnown = false;
 let busy = false;
 let statusRevision = 0;
@@ -50,9 +51,14 @@ $("theme").addEventListener("change", () => {
 function updateControls() {
   for (const id of controls) $(id).disabled = !ready || busy || (id === "autostart" && !autostartKnown);
   $("notifications").disabled = !ready || busy || !telemetryKnown;
+  const policy = keepaliveControls(currentStatus);
+  $("pauseToggle").disabled = !ready || busy || !currentStatus;
+  $("pauseToggle").textContent = policy.paused ? "恢复保活" : "暂停保活";
+  $("reconnect").disabled = !ready || busy || !policy.reconnect;
 }
 function render(status) {
   if (!status || typeof status !== "object") return;
+  currentStatus = status;
   const [label, tone] = describeState(status.state);
   $("connectionCard").dataset.tone = tone;
   $("state").textContent = label;
@@ -60,6 +66,7 @@ function render(status) {
   $("lastCheck").textContent = status.lastCheck || "—";
   $("lastLogin").textContent = status.lastLogin || "—";
   $("message").textContent = status.message || "—";
+  updateControls();
 }
 function renderHistory() {
   const filter = $("logFilter").value;
@@ -91,6 +98,9 @@ const specialEvents = {
   "connection-lost": ["检测到连接中断", "warning"],
   "connection-restored": ["检测到连接恢复", "success"],
   "credentials-changed": ["凭据配置已变更或正在清除", "neutral"],
+  "system-suspended": ["系统进入休眠", "neutral"],
+  "system-resumed": ["系统已唤醒", "neutral"],
+  "network-changed": ["网络接口变化，重新检查", "active"],
 };
 function duration(seconds) {
   if (seconds == null) return "—";
@@ -166,6 +176,12 @@ async function action(fn) {
   try { await fn(); } catch (error) { notice(String(error), true); }
   finally { busy = false; updateControls(); }
 }
+$("pauseToggle").addEventListener("click", () => action(async () => {
+  const paused = !keepaliveControls(currentStatus).paused;
+  await invoke("set_paused", { paused });
+  await refreshStatus();
+  notice(paused ? "已暂停自动保活" : "已恢复保活设置");
+}));
 $("reconnect").addEventListener("click", () => action(async () => {
   await invoke("reconnect");
   notice("已发送重连请求");
@@ -180,7 +196,8 @@ $("credentials").addEventListener("submit", event => {
     finally { $("passwordInput").value = ""; }
     $("accountInput").value = "";
     setPage("overview");
-    notice("凭据已保存，等待后台认证");
+    await refreshStatus();
+    notice(keepaliveControls(currentStatus).paused ? "凭据已保存，保活仍处于暂停状态" : "凭据已保存，后台将按状态处理");
   });
 });
 $("reset").addEventListener("click", () => action(async () => {

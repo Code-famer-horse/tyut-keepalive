@@ -28,6 +28,12 @@ async fn wait_reply(rx: std::sync::mpsc::Receiver<Result<(), String>>) -> Result
 }
 
 #[tauri::command]
+pub(crate) async fn set_paused(scheduler: State<'_, Scheduler>, paused: bool) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    scheduler.send(Event::SetPaused(paused, Some(tx)))?;
+    wait_reply(rx).await
+}
+#[tauri::command]
 pub(crate) async fn reset_credentials(scheduler: State<'_, Scheduler>) -> Result<(), String> {
     let (tx, rx) = std::sync::mpsc::channel();
     scheduler.send(Event::Clear(tx))?;

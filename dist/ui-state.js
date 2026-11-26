@@ -16,6 +16,7 @@ export const STATES = Object.freeze({
   offline: ["等待自动重试", "warning"],
   "invalid-credentials": ["密码错误", "danger"],
   paused: ["自动保活已暂停", "neutral"],
+  suspended: ["系统休眠，等待唤醒", "neutral"],
 });
 export function describeState(state) {
   return Object.hasOwn(STATES, state) ? STATES[state] : ["未知状态", "neutral"];
@@ -28,4 +29,11 @@ export function addHistory(history, status, receivedAt) {
   const prior = history[0];
   if (prior && prior.state === entry.state && prior.message === entry.message) return history;
   return [entry, ...history].slice(0, HISTORY_LIMIT);
+}
+
+export function keepaliveControls(status) {
+  const paused = Boolean(status?.paused);
+  const sleeping = Boolean(status?.sleeping);
+  const blocked = ["initializing", "need-setup", "credential-error", "logging-in"].includes(status?.state);
+  return { paused, reconnect: Boolean(status) && !paused && !sleeping && !blocked };
 }

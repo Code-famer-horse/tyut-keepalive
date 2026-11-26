@@ -5,10 +5,10 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
-use crate::state::{ConnectionState, Event, Scheduler};
+use crate::state::{ConnectionState, Event, Scheduler, Status};
 
 static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
-struct TrayUi { status: MenuItem<tauri::Wry>, reconnect: MenuItem<tauri::Wry> }
+struct TrayUi { status: MenuItem<tauri::Wry>, reconnect: MenuItem<tauri::Wry>, pause: MenuItem<tauri::Wry>, resume: MenuItem<tauri::Wry> }
 
 pub(crate) fn is_tray_available() -> bool { TRAY_AVAILABLE.load(Ordering::Relaxed) }
 
@@ -22,6 +22,8 @@ fn label(state: ConnectionState) -> &'static str {
         ConnectionState::Online => "校园网已连接",
         ConnectionState::Offline => "等待自动重试",
         ConnectionState::InvalidCredentials => "密码错误",
+        ConnectionState::Paused => "保活已暂停",
+        ConnectionState::Suspended => "休眠中",
     }
 }
 // Tiny local status icon: color plus distinct geometry; no external assets.
@@ -63,7 +65,9 @@ pub(crate) fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let reconnect = MenuItem::with_id(app, "reconnect", "立即重连", false, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "应用设置", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "彻底退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&status, &show_item, &reconnect, &settings, &quit])?;
+    let pause = MenuItem::with_id(app, "pause", "暂停保活", false, None::<&str>)?;
+    let resume = MenuItem::with_id(app, "resume", "恢复保活", false, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&status, &show_item, &reconnect, &pause, &resume, &settings, &quit])?;
     let tray = TrayIconBuilder::with_id("main-tray")
         .icon(icon(ConnectionState::Initializing))
         .tooltip("TYUT Keepalive")
@@ -75,6 +79,9 @@ pub(crate) fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             "reconnect" => if let Some(scheduler) = app.try_state::<Scheduler>() {
                 let _ = scheduler.send(Event::Reconnect);
             },
+            "pause" | "resume" => if let Some(scheduler) = app.try_state::<Scheduler>() {
+                let _ = scheduler.send(Event::SetPaused(event.id.as_ref() == "pause", None));
+            },
             "quit" => app.exit(0),
             _ => {}
         })
@@ -85,7 +92,7 @@ pub(crate) fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         }).build(app);
     match tray {
         Ok(_) => {
-            app.manage(TrayUi { status, reconnect });
+            app.manage(TrayUi { status, reconnect, pause, resume });
             TRAY_AVAILABLE.store(true, Ordering::Relaxed);
         }
         Err(_) => {
@@ -95,11 +102,14 @@ pub(crate) fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     Ok(())
 }
-pub(crate) fn update(app: &AppHandle, state: ConnectionState) {
+pub(crate) fn update(app: &AppHandle, status: &Status) {
+    let state = status.state;
     if !is_tray_available() { return; }
     if let Some(ui) = app.try_state::<TrayUi>() {
         let _ = ui.status.set_text(label(state));
-        let _ = ui.reconnect.set_enabled(!matches!(state, ConnectionState::Initializing | ConnectionState::NeedSetup | ConnectionState::CredentialError | ConnectionState::LoggingIn));
+        let _ = ui.reconnect.set_enabled(!status.paused && !status.sleeping && !matches!(state, ConnectionState::Initializing | ConnectionState::NeedSetup | ConnectionState::CredentialError | ConnectionState::LoggingIn));
+        let _ = ui.pause.set_enabled(!status.paused);
+        let _ = ui.resume.set_enabled(status.paused);
     }
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_icon(Some(icon(state)));

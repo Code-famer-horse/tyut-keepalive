@@ -36,6 +36,7 @@ mod tests {
             last_check: "2026-11-26 15:00:00".into(),
             last_login: "尚未登录".into(),
             message: "网络正常".into(),
+            ..Default::default()
         };
         let json = serde_json::to_string(&status).unwrap();
         assert!(json.contains("\"lastCheck\""));
@@ -50,6 +51,7 @@ pub fn run() {
     let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_power_monitor::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--from-autostart"]),
@@ -66,6 +68,7 @@ pub fn run() {
             commands::get_telemetry,
             commands::set_notifications,
             commands::reconnect,
+            commands::set_paused,
             commands::reset_credentials,
             commands::setup_credentials,
             commands::set_autostart,

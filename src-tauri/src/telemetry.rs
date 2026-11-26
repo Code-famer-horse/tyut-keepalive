@@ -22,7 +22,8 @@ const ROW_LIMIT: usize = 200;
 pub(crate) enum Kind {
     Initializing, NeedSetup, CredentialError, Checking, LoggingIn,
     Online, Offline, InvalidCredentials, AuthConfirmed, ConnectionLost,
-    ConnectionRestored, CredentialsChanged,
+    ConnectionRestored, CredentialsChanged, Paused, Suspended,
+    SystemSuspended, SystemResumed, NetworkChanged,
 }
 impl From<ConnectionState> for Kind {
     fn from(state: ConnectionState) -> Self {
@@ -35,6 +36,8 @@ impl From<ConnectionState> for Kind {
             ConnectionState::Online => Self::Online,
             ConnectionState::Offline => Self::Offline,
             ConnectionState::InvalidCredentials => Self::InvalidCredentials,
+            ConnectionState::Paused => Self::Paused,
+            ConnectionState::Suspended => Self::Suspended,
         }
     }
 }
@@ -220,7 +223,7 @@ impl Journal {
             self.storage_notified = true;
             notification = Some(Kind::CredentialError);
         }
-        if matches!(state, ConnectionState::NeedSetup | ConnectionState::CredentialError | ConnectionState::InvalidCredentials) {
+        if matches!(state, ConnectionState::NeedSetup | ConnectionState::CredentialError | ConnectionState::InvalidCredentials | ConnectionState::Paused | ConnectionState::Suspended) {
             self.last_observation = None;
             self.online_since = None;
         }
@@ -258,6 +261,15 @@ pub(crate) fn set_enabled(state: &Shared, enabled: bool) -> Result<bool, String>
 pub(crate) fn credentials_changed(app: &AppHandle) {
     if let Some(state) = app.try_state::<Shared>() {
         if let Ok(mut journal) = state.lock() { journal.reset_observation(); }
+    }
+}
+pub(crate) fn context_changed(app: &AppHandle, kind: Kind) {
+    if let Some(shared) = app.try_state::<Shared>() {
+        if let Ok(mut journal) = shared.lock() {
+            journal.last_observation = None;
+            journal.online_since = None;
+            journal.record(kind);
+        }
     }
 }
 pub(crate) fn on_state(app: &AppHandle, state: ConnectionState, observation: Option<bool>, authenticated: bool) {
@@ -307,6 +319,19 @@ mod tests {
         let recovered = Journal::open(temp.0.clone());
         assert_eq!(recovered.daily, j.daily);
         assert!(recovered.online_since.is_none());
+    }
+    #[test]
+    fn pause_and_suspend_end_observation_without_outage() {
+        let temp = Temp::new();
+        let mut j = Journal::open(temp.0.clone());
+        for state in [ConnectionState::Paused, ConnectionState::Suspended] {
+            j.observe(true, false);
+            j.state(state, None, false);
+            assert!(j.online_since.is_none());
+            assert!(j.last_observation.is_none());
+            j.observe(false, false);
+            assert_eq!(j.daily.interruptions, 0);
+        }
     }
     #[test]
     fn credentials_change_does_not_count_as_outage() {
