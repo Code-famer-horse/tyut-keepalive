@@ -287,7 +287,7 @@ pub(crate) fn on_state(app: &AppHandle, state: ConnectionState, observation: Opt
             _ => return,
         };
         // Notification failure never interrupts keepalive, and no credential data is sent.
-        if app.notification().builder().title("TYUT Keepalive").body(body).show().is_err() {
+        if app.notification().builder().title(crate::APP_DISPLAY_NAME).body(body).show().is_err() {
             crate::log("系统通知发送失败");
         }
     }

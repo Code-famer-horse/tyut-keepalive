@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Result};
 use std::{fs, path::Path};
 use super::config::{self, Credentials};
 
-const SERVICE: &str = "com.tyut.keepalive";
+const SERVICE: &str = crate::APP_IDENTIFIER;
 const RECORD: &str = "campus-credentials";
 
 trait Store {

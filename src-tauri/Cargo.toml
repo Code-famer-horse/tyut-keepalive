@@ -8,6 +8,10 @@ description = "TYUT campus network auto-login (Tauri desktop)"
 name = "tyut_keepalive_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Explicitly opt in; no dependency changes and no effect on official builds.
+test-build = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

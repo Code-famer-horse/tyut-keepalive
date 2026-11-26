@@ -41,7 +41,8 @@ fn policy(config: &serde_json::Value) -> bool {
         && config.get("dangerousInsecureTransportProtocol").and_then(|v| v.as_bool()) == Some(false)
 }
 fn enabled(app: &AppHandle) -> bool {
-    app.config().plugins.0.get("updater").is_some_and(policy)
+    !crate::TEST_BUILD && app.config().identifier == crate::APP_IDENTIFIER
+        && app.config().plugins.0.get("updater").is_some_and(policy)
 }
 fn trusted_download(url: &reqwest::Url) -> bool {
     url.scheme() == "https" && url.host_str() == Some("github.com")

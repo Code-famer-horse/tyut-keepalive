@@ -73,3 +73,7 @@ cargo audit --file src-tauri/Cargo.lock
 开发设计记录见 [docs](docs/)。
 
 发布前检查与剩余依赖风险见 [v0.4.0 验收记录](docs/v0.4.0-release-review.md)。
+
+## 独立测试安装包（不发布 Release）
+
+开发分支的 [Independent Test Installers](https://github.com/Code-famer-horse/tyut-keepalive/actions/workflows/test-build.yml) 工作流仅生成 Actions Artifacts。选择成功运行的 Windows MSI 或 Linux DEB/AppImage；压缩包内含 SHA256SUMS.txt 和 BUILD-INFO.json。测试版独立安装、凭据及自启，不启用更新，不配置系统代码签名。详细验收步骤见 [独立测试版说明](docs/v0.4.0-test-build.md)。

@@ -70,7 +70,7 @@ pub(crate) fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&status, &show_item, &reconnect, &pause, &resume, &settings, &quit])?;
     let tray = TrayIconBuilder::with_id("main-tray")
         .icon(icon(ConnectionState::Initializing))
-        .tooltip("TYUT Keepalive")
+        .tooltip(crate::APP_DISPLAY_NAME)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -114,6 +114,6 @@ pub(crate) fn update(app: &AppHandle, status: &Status) {
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_icon(Some(icon(state)));
         // Linux may not support tooltips; status menu is the fallback.
-        let _ = tray.set_tooltip(Some(format!("TYUT Keepalive · {}", label(state))));
+        let _ = tray.set_tooltip(Some(format!("{} · {}", crate::APP_DISPLAY_NAME, label(state))));
     }
 }

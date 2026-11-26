@@ -1,0 +1,85 @@
+name: Independent Test Installers
+on:
+  push:
+    branches: ['develop/v0.4.0']
+    paths:
+      - '.github/workflows/test-build.yml'
+      - 'src-tauri/tauri.test.conf.json'
+      - 'scripts/prepare_test_build.py'
+      - 'scripts/collect_test_artifacts.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/develop/v0.4.0'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    uses: ./.github/workflows/platform-checks.yml
+    with:
+      os: ${{ matrix.os }}
+
+  bundle:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+            bundles: msi
+          - os: ubuntu-22.04
+            platform: linux
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+    runs-on: ${{ matrix.os }}
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Linux bundle dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: independent-test-${{ matrix.target }}
+      - name: Install locked frontend tools
+        run: npm ci
+      - name: Verify production security and prepare isolated frontend
+        run: |
+          python scripts/check_security.py
+          python scripts/prepare_test_build.py
+          node --check dist-test/main.js
+      - name: Check test feature
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features test-build --locked
+      - name: Build unsigned independent test installers
+        run: npm run tauri -- build --config src-tauri/tauri.test.conf.json --features test-build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+      - name: Verify and hash test bundles
+        run: python scripts/collect_test_artifacts.py --platform ${{ matrix.platform }} --target ${{ matrix.target }}
+      - name: Upload only test installers and SHA-256 checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: TYUT-Keepalive-Test-${{ matrix.platform }}-x64-${{ github.sha }}
+          path: test-artifacts/
+          if-no-files-found: error
+          retention-days: 30

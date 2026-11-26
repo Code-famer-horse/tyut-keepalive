@@ -21,3 +21,7 @@ node_modules/
 *.pem
 *.p12
 *.pfx
+
+# Generated isolated test frontend and installer collection.
+/dist-test/
+/test-artifacts/
