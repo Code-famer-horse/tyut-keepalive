@@ -1,4 +1,7 @@
+mod commands;
 mod core;
+mod state;
+mod tray;
 use crate::core::{config, dns};
 
 pub(crate) const PORTAL_URL: &str = "http://219.226.127.250";
@@ -15,6 +18,16 @@ pub(crate) fn log(message: impl AsRef<str>) {
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
         message.as_ref()
     );
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn status_default_is_empty() {
+        let status = crate::state::Status::default();
+        assert!(status.state.is_empty());
+        assert!(status.account.is_empty());
+    }
 }
 
 pub fn run() {
