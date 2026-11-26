@@ -32,6 +32,8 @@ jobs:
         run: |
           npm run check:html
           node --check dist/main.js
+          node --check dist/ui-state.js
+          node --test scripts/test_ui.mjs
       - name: Resolve dependencies
         run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Rust unit tests

@@ -3,15 +3,37 @@
   "productName": "TYUT Keepalive",
   "version": "0.3.3",
   "identifier": "com.tyut.keepalive",
-  "build": { "frontendDist": "../dist" },
+  "build": {
+    "frontendDist": "../dist"
+  },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "label": "main", "title": "TYUT 校园网保活", "width": 480, "height": 380, "minWidth": 360, "minHeight": 280, "resizable": true, "center": true, "visible": false }],
-    "security": { "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'" }
+    "windows": [
+      {
+        "label": "main",
+        "title": "TYUT 校园网保活",
+        "width": 680,
+        "height": 540,
+        "minWidth": 360,
+        "minHeight": 420,
+        "resizable": true,
+        "center": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.icns"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ]
   }
 }
