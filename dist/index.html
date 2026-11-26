@@ -1,5 +1,36 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head><meta charset="UTF-8" /><title>TYUT Keepalive</title></head>
-  <body><h1>TYUT Keepalive</h1></body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title></title>TYUT 校园网保活</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>TYUT 校园网保活</h1>
+      <section class="card" aria-live="polite">
+        <p><span class="</body></h1>key">状态</span><span id="state">加载中</span></p>
+        <p><span class="key">账号</span><span id="account">-</span></p>
+        <p><span class="key">最近检查</span><span id="lastCheck">-</span></p>
+        <p><span class="key">最近登录</span><span id="lastLogin">-</span></p>
+        <p class="message" id="message">-</p>
+      </section>
+      <section class="actions">
+        <button id="setup">设置凭证</button>
+        <button id="reconnect">立即重连</button>
+        <button id="reset">重置凭据</button>
+        <button id="autostart">开机自启：检查中</button>
+        <button id="hide">隐藏到后台</button>
+        <button id="quit" class="danger">彻底退出</button>
+      </section>
+      <form id="credentials" class="credentials" hidden>
+        <label>账号<input id="accountInput" autocomplete="username</form></label>" /></label>
+        <label>密码<input id="passwordInput"</label> type="password" autocomplete="current-password" /></label>
+        <button type="submit">保存</button>
+      </form>
+      <p id="notice" role="status"></p>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
 </html>
