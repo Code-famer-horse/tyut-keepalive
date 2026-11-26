@@ -3,6 +3,7 @@ mod core;
 mod state;
 mod tray;
 use crate::core::{config, dns};
+use tauri::Manager;
 
 pub(crate) type SharedStatus = state::SharedStatus;
 
@@ -55,6 +56,16 @@ mod tests {
 pub fn run() {
     let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             commands::get_status,
