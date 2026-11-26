@@ -80,9 +80,29 @@ pub fn run() {
         ])
         .setup(move |app| {
             state::start_worker(app.handle().clone(), shared)?;
+            tray::create_tray(app.handle())?;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Tauri 应用启动失败");
-    let _ = app;
+        .build(tauri::generate_context!())
+        .expect("Tauri 应用构建失败");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } = event
+        {
+            api.prevent_close();
+            if label == "main" {
+                if let Some(window) = app_handle.get_webview_window(&label) {
+                    if tray::is_tray_available() {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.minimize();
+                    }
+                }
+            }
+        }
+    });
 }

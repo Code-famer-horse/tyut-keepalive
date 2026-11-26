@@ -81,7 +81,11 @@ pub(crate) fn show_window(app: AppHandle) {
 #[tauri::command]
 pub(crate) fn hide_window(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.minimize();
+        if crate::tray::is_tray_available() {
+            let _ = window.hide();
+        } else {
+            let _ = window.minimize();
+        }
     }
 }
 
