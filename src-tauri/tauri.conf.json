@@ -22,7 +22,10 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; media-src 'none'; worker-src 'none'",
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "bundle": {
@@ -34,6 +37,18 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "icons/icon.icns"
-    ]
+    ],
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/Code-famer-horse/tyut-keepalive/releases/latest/download/latest.json"
+      ],
+      "dangerousInsecureTransportProtocol": false,
+      "allowDowngrades": false,
+      "requireSignedVersion": true
+    }
   }
 }

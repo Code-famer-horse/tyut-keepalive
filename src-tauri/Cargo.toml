@@ -16,6 +16,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = "2.14.1"
 netwatcher = "0.8"
 tauri-plugin-power-monitor = "0.1"
 anyhow = "1"

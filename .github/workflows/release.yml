@@ -24,6 +24,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Validate release trust configuration
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: python scripts/check_security.py --release
       - name: Create or reuse draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,7 +56,7 @@ jobs:
           - platform: windows-latest
             args: --bundles msi
           - platform: macos-15
-            args: --bundles dmg
+            args: --bundles app,dmg
           - platform: ubuntu-latest
             args: --bundles deb,appimage
     runs-on: ${{ matrix.platform }}
@@ -71,8 +79,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
+      - name: Enable signed update artifacts for this release
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: python scripts/check_security.py --enable-bundling
 
       - name: Check frontend HTML
         run: npm run check:html
@@ -81,6 +96,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'TYUT Keepalive v__VERSION__（Windows / macOS / Linux）'
@@ -88,6 +105,8 @@ jobs:
           releaseAssetNamePattern: 'TYUT-Keepalive-v[version]-[platform]-[arch][ext]'
           releaseDraft: true
           prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: false
           args: ${{ matrix.args }} -- --locked
 
   publish:
@@ -96,6 +115,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Check complete updater manifest before publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download "$TAG" --pattern latest.json --output "$RUNNER_TEMP/latest.json"
+          python scripts/check_update_manifest.py "$RUNNER_TEMP/latest.json" "$TAG"
       - name: Publish only after all platform builds succeed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

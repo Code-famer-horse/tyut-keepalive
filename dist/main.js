@@ -6,6 +6,9 @@ const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
 const listen = tauri?.event?.listen;
 let ready = false;
+let updatesEnabled = false;
+let updateBusy = false;
+let pendingUpdate = null;
 let currentStatus = null;
 let autostartKnown = false;
 let busy = false;
@@ -51,6 +54,8 @@ $("theme").addEventListener("change", () => {
 function updateControls() {
   for (const id of controls) $(id).disabled = !ready || busy || (id === "autostart" && !autostartKnown);
   $("notifications").disabled = !ready || busy || !telemetryKnown;
+  $("checkUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled;
+  $("installUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled || !pendingUpdate;
   const policy = keepaliveControls(currentStatus);
   $("pauseToggle").disabled = !ready || busy || !currentStatus;
   $("pauseToggle").textContent = policy.paused ? "恢复保活" : "暂停保活";
@@ -170,7 +175,7 @@ async function refresh() {
   catch (error) { notice("读取状态失败：" + String(error), true); }
 }
 async function action(fn) {
-  if (!ready || busy) return;
+  if (!ready || busy || updateBusy) return;
   busy = true;
   updateControls();
   try { await fn(); } catch (error) { notice(String(error), true); }
@@ -226,6 +231,49 @@ $("hide").addEventListener("click", () => action(async () => {
 $("quit").addEventListener("click", () => action(async () => {
   if (window.confirm("彻底退出并停止后台保活？")) await invoke("quit");
 }));
+async function checkUpdate() {
+  if (!ready || busy || updateBusy || !updatesEnabled) return;
+  updateBusy = true;
+  pendingUpdate = null;
+  updateControls();
+  $("updateStatus").textContent = "正在检查更新";
+  $("updateNotes").hidden = true;
+  $("updateNotes").textContent = "";
+  try {
+    pendingUpdate = await invoke("check_update");
+    $("updateStatus").textContent = pendingUpdate ? "发现新版 v" + pendingUpdate.version : "当前没有可用的更新";
+    $("updateNotes").textContent = pendingUpdate?.notes || "";
+    $("updateNotes").hidden = !$("updateNotes").textContent;
+  } catch (error) {
+    $("updateStatus").textContent = String(error);
+  } finally { updateBusy = false; updateControls(); }
+}
+$("checkUpdate").addEventListener("click", checkUpdate);
+$("installUpdate").addEventListener("click", async () => {
+  if (!ready || busy || updateBusy || !pendingUpdate) return;
+  const version = pendingUpdate.version;
+  if (!window.confirm("下载并安装签名更新 v" + version + "？安装成功后应用可能重新启动。")) return;
+  updateBusy = true;
+  pendingUpdate = null;
+  updateControls();
+  $("updateStatus").textContent = "正在下载、验证签名并安装";
+  try {
+    await invoke("install_update", { version });
+    $("updateStatus").textContent = "安装操作已完成，请按系统提示重新启动";
+  } catch (error) {
+    $("updateStatus").textContent = String(error);
+  } finally { updateBusy = false; updateControls(); }
+});
+async function initUpdates() {
+  try {
+    updatesEnabled = await invoke("update_enabled");
+    $("updateStatus").textContent = updatesEnabled ? "签名更新可用" : "签名更新未启用：尚未配置可信公钥";
+    updateControls();
+    if (updatesEnabled) await checkUpdate();
+  } catch {
+    $("updateStatus").textContent = "无法读取签名更新配置";
+  }
+}
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 window.addEventListener("focus", refresh);
 async function init() {
@@ -247,9 +295,10 @@ async function init() {
     $("serviceText").textContent = "后台服务已连接";
     updateControls();
     await Promise.all([refreshAutostart(), refreshTelemetry()]);
+    void initUpdates();
     try {
       const version = await tauri.app?.getVersion?.();
-      if (version) $("appVersion").textContent = "v" + version + " · 开发分支";
+      if (version) $("appVersion").textContent = "v" + version;
     } catch { /* keep the truthful generic development label */ }
   } catch (error) {
     ready = false;

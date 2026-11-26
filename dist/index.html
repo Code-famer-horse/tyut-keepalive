@@ -108,7 +108,13 @@
           <p>校园网自动认证与后台保活工具。</p>
           <p class="muted">Rust · Tauri 2 · 原生桌面窗口</p>
           <p class="muted">项目仓库：Code-famer-horse/tyut-keepalive</p>
-          <p class="muted">应用内更新将在后续阶段实现。</p>
+          <p id="updateStatus" role="status" aria-live="polite" class="muted">正在读取更新配置</p>
+          <p id="updateNotes" class="muted" hidden></p>
+          <div class="actions">
+            <button id="checkUpdate" type="button" disabled>检查更新</button>
+            <button id="installUpdate" class="primary" type="button" disabled>安装签名更新</button>
+          </div>
+          <p class="muted">启动时检查一次；仅在你确认后下载、验证签名及安装。未配置可信公钥时停用。</p>
         </article>
       </section>
     </main>

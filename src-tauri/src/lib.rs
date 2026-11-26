@@ -3,6 +3,7 @@ mod core;
 mod state;
 mod tray;
 mod telemetry;
+mod updates;
 use crate::core::{config, dns};
 use tauri::Manager;
 
@@ -51,6 +52,8 @@ pub fn run() {
     let shared: SharedStatus = std::sync::Arc::new(std::sync::Mutex::new(state::Status::default()));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::UpdateState::default())
         .plugin(tauri_plugin_power_monitor::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -74,7 +77,9 @@ pub fn run() {
             commands::set_autostart,
             commands::is_autostart,
             commands::quit,
-            commands::show_window,
+            updates::update_enabled,
+            updates::check_update,
+            updates::install_update,
             commands::hide_window,
         ])
         .setup(move |app| {

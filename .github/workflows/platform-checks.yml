@@ -5,6 +5,10 @@ on:
       os:
         required: true
         type: string
+      resolve_lock:
+        type: boolean
+        required: false
+        default: false
 permissions:
   contents: read
 jobs:
@@ -34,6 +38,10 @@ jobs:
           node --check dist/main.js
           node --check dist/ui-state.js
           node --test scripts/test_ui.mjs
+          python scripts/check_security.py
+      - name: Resolve new dependencies for development lockfile artifact
+        if: inputs.resolve_lock
+        run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1
       - name: Resolve dependencies
         run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Rust unit tests
@@ -47,3 +55,9 @@ jobs:
           name: cargo-lock
           path: src-tauri/Cargo.lock
           if-no-files-found: error
+      - name: Install RustSec audit tool
+        if: runner.os == 'Linux'
+        run: cargo install cargo-audit --version 0.23.0 --locked
+      - name: Audit resolved Cargo.lock (RustSec)
+        if: runner.os == 'Linux'
+        run: cargo audit --file src-tauri/Cargo.lock
