@@ -149,6 +149,8 @@ pub(crate) fn save(legacy: &Path, value: &Credentials) -> Result<()> {
     save_to(&NativeStore::open()?, legacy, value)
 }
 pub(crate) fn clear(legacy: &Path) -> Result<()> {
+    // Record user intent even if opening the native store itself fails.
+    mark_clear(legacy)?;
     clear_from(&NativeStore::open()?, legacy)
 }
 
