@@ -14,8 +14,4 @@ logs/
 archive/python/
 tyut-keepalive-rs-tmux-psmux.zip
 
-/target/*
-!/target/release/
-/target/release/*
-!/target/release/tyut-keepalive
 node_modules/
