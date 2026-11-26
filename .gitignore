@@ -11,3 +11,7 @@ logs/
 *.bak
 *.pre-*
 校园网自动登陆.zip
+archive/python/
+tyut-keepalive-rs-tmux-psmux.zip
+
+/target/
