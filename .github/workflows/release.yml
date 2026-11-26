@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     strategy:
@@ -51,6 +55,8 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      # All jobs update the same draft latest.json. Avoid concurrent writes.
+      max-parallel: 1
       matrix:
         include:
           - platform: windows-latest
@@ -105,7 +111,7 @@ jobs:
           releaseAssetNamePattern: 'TYUT-Keepalive-v[version]-[platform]-[arch][ext]'
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: false
           args: ${{ matrix.args }} -- --locked
 
@@ -126,7 +132,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           gh release download "$TAG" --pattern latest.json --output "$RUNNER_TEMP/latest.json"
-          python scripts/check_update_manifest.py "$RUNNER_TEMP/latest.json" "$TAG"
+          gh release view "$TAG" --json assets --jq '.assets' > "$RUNNER_TEMP/release-assets.json"
+          python scripts/check_update_manifest.py "$RUNNER_TEMP/latest.json" "$TAG" "$RUNNER_TEMP/release-assets.json"
       - name: Publish only after all platform builds succeed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

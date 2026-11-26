@@ -52,14 +52,14 @@ $("theme").addEventListener("change", () => {
   if (!saveTheme(storage, $("theme").value)) notice("主题已切换，但无法保存偏好设置", true);
 });
 function updateControls() {
-  for (const id of controls) $(id).disabled = !ready || busy || (id === "autostart" && !autostartKnown);
-  $("notifications").disabled = !ready || busy || !telemetryKnown;
+  for (const id of controls) $(id).disabled = !ready || busy || updateBusy || (id === "autostart" && !autostartKnown);
+  $("notifications").disabled = !ready || busy || updateBusy || !telemetryKnown;
   $("checkUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled;
   $("installUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled || !pendingUpdate;
   const policy = keepaliveControls(currentStatus);
-  $("pauseToggle").disabled = !ready || busy || !currentStatus;
+  $("pauseToggle").disabled = !ready || busy || updateBusy || !currentStatus;
   $("pauseToggle").textContent = policy.paused ? "恢复保活" : "暂停保活";
-  $("reconnect").disabled = !ready || busy || !policy.reconnect;
+  $("reconnect").disabled = !ready || busy || updateBusy || !policy.reconnect;
 }
 function render(status) {
   if (!status || typeof status !== "object") return;

@@ -35,6 +35,7 @@ jobs:
           node --check dist/ui-state.js
           node --test scripts/test_ui.mjs
           python scripts/check_security.py
+          python scripts/test_release_checks.py
       - name: Resolve dependencies
         run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Rust unit tests

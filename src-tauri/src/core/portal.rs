@@ -84,7 +84,8 @@ pub(crate) fn check_network(client: &Client) -> bool {
     false
 }
 
-fn portal_ip(client: &Client) -> Result<Option<Ipv4Addr>> {
+fn portal_ip(client: &Client, cancelled: &AtomicBool) -> Result<Option<Ipv4Addr>> {
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     log(format!("访问 Portal：{PORTAL_URL}"));
     let mut url = Url::parse(PORTAL_URL)?;
     let mut response = client
@@ -92,6 +93,7 @@ fn portal_ip(client: &Client) -> Result<Option<Ipv4Addr>> {
         .timeout(Duration::from_secs(10))
         .send()?;
     for _ in 0..10 {
+        anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
         if !response.status().is_redirection() {
             break;
         }
@@ -100,6 +102,10 @@ fn portal_ip(client: &Client) -> Result<Option<Ipv4Addr>> {
             None => break,
         };
         url = url.join(&location)?;
+        // Preserve campus redirect compatibility, but reject non-HTTP schemes
+        // and embedded user credentials; authentication always uses LOGIN_HOST.
+        anyhow::ensure!(matches!(url.scheme(), "http" | "https") && url.username().is_empty() && url.password().is_none(),
+            "Portal 重定向地址不安全");
         log("Portal 收到重定向响应");
         response = client
             .get(url.clone())
@@ -258,18 +264,20 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
     log("已获取本机网络接口信息");
     let resolved_ips = match campus_host_ips() {
         Ok(ips) => Some(ips),
-        Err(error) => {
-            log(format!("校园 DNS 不可用，改用系统 DNS：{error:#}"));
+        Err(_) => {
+            log("校园 DNS 不可用，改用系统 DNS");
             None
         }
     };
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     let client = client(resolved_ips)?;
-    let user_ip = portal_ip(&client)?.unwrap_or(ip);
+    let user_ip = portal_ip(&client, cancelled)?.unwrap_or(ip);
     log("已确定认证使用的客户端 IP");
     anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     load_config(&client, user_ip, &mac)?;
     thread::sleep(Duration::from_millis(500));
     let outcome = login(&client, user_ip, credentials, cancelled)?;
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     match outcome {
         LoginOutcome::Indeterminate if check_network(&client) => Ok(LoginOutcome::Reachable),
         other => Ok(other),

@@ -75,8 +75,13 @@ def main():
         version = cfg["version"]
         require(re.fullmatch(r"\d+\.\d+\.\d+", version), "release must use a stable semantic version")
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        package_lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
         cargo = tomllib.loads((ROOT / "src-tauri/Cargo.toml").read_text(encoding="utf-8"))
-        require(package["version"] == cargo["package"]["version"] == version, "version mismatch")
+        cargo_lock = tomllib.loads((ROOT / "src-tauri/Cargo.lock").read_text(encoding="utf-8"))
+        root_packages = [p for p in cargo_lock["package"] if p["name"] == cargo["package"]["name"] and "source" not in p]
+        require(len(root_packages) == 1, "missing app Cargo.lock entry")
+        require(package["version"] == package_lock["version"] == package_lock["packages"][""]["version"]
+                == cargo["package"]["version"] == root_packages[0]["version"] == version, "version mismatch")
         require(os.environ.get("GITHUB_REF_NAME") == "v" + version, "release tag/version mismatch")
         require(os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "").strip(), "missing signing secret")
     if args.enable_bundling:
