@@ -62,10 +62,11 @@ pub(crate) fn validate(credentials: &Credentials) -> Result<()> {
 }
 
 pub(crate) fn read_credentials(path: &Path) -> Result<Option<Credentials>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let data = fs::read_to_string(path).with_context(|| format!("读取 {:?} 失败", path))?;
+    let data = match fs::read_to_string(path) {
+        Ok(data) => data,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("读取旧凭据文件失败"),
+    };
     let credentials: Credentials = serde_json::from_str(&data).context("config.enc 格式有误")?;
     validate(&credentials)?;
     Ok(Some(credentials))

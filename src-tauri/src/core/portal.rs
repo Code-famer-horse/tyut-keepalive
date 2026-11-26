@@ -9,6 +9,7 @@ use reqwest::{
 };
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -200,7 +201,7 @@ pub(crate) fn interpret_login(text: &str) -> LoginOutcome {
     }
 }
 
-fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<LoginOutcome> {
+fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials, cancelled: &AtomicBool) -> Result<LoginOutcome> {
     let params = vec![
         ("callback", xor_encode("dr1004")),
         ("login_method", xor_encode("1")),
@@ -222,6 +223,7 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<Log
         ("v", timestamp_param()?),
         ("encrypt", "1".to_owned()),
     ];
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     log("请求 login ...");
     let response = client
         .get(format!("{LOGIN_HOST}/eportal/portal/login"))
@@ -244,7 +246,8 @@ fn login(client: &Client, ip: Ipv4Addr, credentials: &Credentials) -> Result<Log
     Ok(outcome)
 }
 
-pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str>) -> Result<LoginOutcome> {
+pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str>, cancelled: &AtomicBool) -> Result<LoginOutcome> {
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     let ip = local_ip()?;
     let mac = match mac_override {
         Some(mac) => mac.to_owned(),
@@ -261,9 +264,10 @@ pub(crate) fn attempt_login(credentials: &Credentials, mac_override: Option<&str
     let client = client(resolved_ips)?;
     let user_ip = portal_ip(&client)?.unwrap_or(ip);
     log("已确定认证使用的客户端 IP");
+    anyhow::ensure!(!cancelled.load(Ordering::Acquire), "认证任务已取消");
     load_config(&client, user_ip, &mac)?;
     thread::sleep(Duration::from_millis(500));
-    let outcome = login(&client, user_ip, credentials)?;
+    let outcome = login(&client, user_ip, credentials, cancelled)?;
     match outcome {
         LoginOutcome::Indeterminate if check_network(&client) => Ok(LoginOutcome::Success),
         other => Ok(other),

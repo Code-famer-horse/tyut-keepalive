@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::Serialize;
 use std::{
-    sync::{mpsc::{self, Receiver, RecvTimeoutError, Sender}, Arc, Mutex},
+    sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, RecvTimeoutError, Sender}, Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -92,9 +92,10 @@ fn current_result(generation: u64, current: u64, pending: bool) -> bool {
     generation == current && !pending
 }
 
-fn launch(tx: Sender<Event>, generation: u64, task: Task, value: config::Credentials) {
+fn launch(tx: Sender<Event>, generation: u64, task: Task, value: config::Credentials, cancelled: Arc<AtomicBool>) {
     thread::spawn(move || {
         let outcome = (|| -> Result<Outcome> {
+            anyhow::ensure!(!cancelled.load(Ordering::Acquire), "任务已取消");
             if matches!(task, Task::Check | Task::Retry) {
                 let client = portal::client(None)?;
                 let online = portal::check_network(&client);
@@ -102,7 +103,7 @@ fn launch(tx: Sender<Event>, generation: u64, task: Task, value: config::Credent
                     return Ok(Outcome::Checked(online));
                 }
             }
-            Ok(Outcome::Authenticated(portal::attempt_login(&value, None)?))
+            Ok(Outcome::Authenticated(portal::attempt_login(&value, None, &cancelled)?))
         })().unwrap_or(Outcome::Failed);
         // Network errors may include sensitive URLs. Only send a classified result.
         let _ = tx.send(Event::Finished { generation, task, outcome });
@@ -131,6 +132,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
         let mut generation = 0_u64;
         let mut retry = RETRY_INITIAL;
         let mut running: Option<(u64, Task)> = None;
+        let mut cancellation: Option<Arc<AtomicBool>> = None;
         let mut next = None;
         if let Some(value) = &active {
             status.account = config::masked_account(&value.account);
@@ -155,7 +157,9 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                         (ConnectionState::LoggingIn, "正在尝试登录")
                     };
                     publish(&app, &shared, &mut status, state, message);
-                    launch(tx.clone(), generation, task, value);
+                    let cancelled = Arc::new(AtomicBool::new(false));
+                    cancellation = Some(cancelled.clone());
+                    launch(tx.clone(), generation, task, value, cancelled);
                 }
                 Ok(Event::Reconnect) => {
                     if active.is_none() {
@@ -169,6 +173,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 }
                 Ok(Event::Save(value, reply)) => {
                     // Invalidate results from prior credentials before touching storage.
+                    if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
                     generation = generation.wrapping_add(1);
                     active = None;
                     next = None;
@@ -189,6 +194,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                     let _ = reply.send(result);
                 }
                 Ok(Event::Clear(reply)) => {
+                    if let Some(flag) = &cancellation { flag.store(true, Ordering::Release); }
                     generation = generation.wrapping_add(1);
                     active = None;
                     next = None;
@@ -206,6 +212,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                 Ok(Event::Finished { generation: completed, task, outcome }) => {
                     if running != Some((completed, task)) { continue; }
                     running = None;
+                    cancellation = None;
                     // A new credential or queued manual action supersedes an old result.
                     if !current_result(completed, generation, next.is_some()) { continue; }
                     status.last_check = now();
