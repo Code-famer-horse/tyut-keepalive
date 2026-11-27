@@ -42,13 +42,24 @@ def verify_deb(package):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--platform", choices=["windows", "linux"], required=True)
+    parser.add_argument("--platform", choices=["windows", "linux", "macos"], required=True)
     parser.add_argument("--target", required=True)
     args = parser.parse_args()
-    expected = {"windows": "x86_64-pc-windows-msvc", "linux": "x86_64-unknown-linux-gnu"}
+    expected = {"windows": "x86_64-pc-windows-msvc", "linux": "x86_64-unknown-linux-gnu", "macos": "universal-apple-darwin"}
     require(args.target == expected[args.platform], "wrong architecture")
     bundle = ROOT / "src-tauri/target" / args.target / "release/bundle"
-    patterns = [("msi", "*.msi")] if args.platform == "windows" else [("deb", "*.deb"), ("appimage", "*.AppImage")]
+    patterns = {"windows": [("msi", "*.msi")], "linux": [("deb", "*.deb"), ("appimage", "*.AppImage")], "macos": [("dmg", "*.dmg")]}[args.platform]
+    if args.platform == "macos":
+        import plistlib
+        apps = list((bundle / "macos").glob("*.app"))
+        require(len(apps) == 1, "expected one macOS app")
+        with (apps[0] / "Contents/Info.plist").open("rb") as file:
+            info = plistlib.load(file)
+        require(info["CFBundleIdentifier"] == "com.tyut.keepalive.test", "wrong macOS bundle identity")
+        executable = apps[0] / "Contents/MacOS" / info["CFBundleExecutable"]
+        require(executable.name == "tyut-keepalive-test", "wrong macOS executable")
+        archs = subprocess.check_output(["lipo", "-archs", str(executable)], text=True).split()
+        require(set(archs) == {"arm64", "x86_64"}, "not a universal macOS binary")
     out = ROOT / "test-artifacts"
     out.mkdir(exist_ok=False)
     files = []
@@ -60,6 +71,8 @@ def main():
         require("test" in package.name.lower(), "installer filename lacks test marker")
         if directory == "deb":
             verify_deb(package)
+        if directory == "dmg":
+            subprocess.run(["hdiutil", "verify", str(package)], check=True)
         target = out / package.name
         shutil.copy2(package, target)
         files.append(target)
