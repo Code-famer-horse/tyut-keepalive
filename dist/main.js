@@ -1,4 +1,4 @@
-import { normalizeTheme, readTheme, saveTheme, describeState, keepaliveControls } from "./ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState, keepaliveControls, filterHistory, diagnosticReport } from "./ui-state.js";
 const $ = id => document.getElementById(id);
 const pages = ["overview", "logs", "settings", "about"];
 const controls = ["reconnect", "saveCredentials", "reset", "autostart", "hide", "quit"];
@@ -54,6 +54,8 @@ $("theme").addEventListener("change", () => {
 function updateControls() {
   for (const id of controls) $(id).disabled = !ready || busy || updateBusy || (id === "autostart" && !autostartKnown);
   $("notifications").disabled = !ready || busy || updateBusy || !telemetryKnown;
+  $("generateDiagnostic").disabled = !ready || busy || updateBusy;
+  $("copyDiagnostic").disabled = busy || updateBusy || !$("diagnosticText").value;
   $("checkUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled;
   $("installUpdate").disabled = !ready || busy || updateBusy || !updatesEnabled || !pendingUpdate;
   const policy = keepaliveControls(currentStatus);
@@ -74,10 +76,9 @@ function render(status) {
   updateControls();
 }
 function renderHistory() {
-  const filter = $("logFilter").value;
-  const query = $("logSearch").value.trim().toLowerCase();
-  const entries = history.filter(entry => (filter === "all" || entry.tone === filter) &&
-    (entry.label + " " + entry.receivedAt).toLowerCase().includes(query));
+  const entries = filterHistory(history, $("logFilter").value, $("logKind").value, $("logSearch").value);
+  $("logCount").textContent = telemetryKnown ? "显示 " + entries.length + " / " + history.length + " 条记录" : "记录未读取或已过期";
+  $("historyEmpty").textContent = !telemetryKnown ? "运行记录暂不可用" : history.length ? "没有匹配的事件，请重置筛选" : "暂无状态事件";
   const fragment = document.createDocumentFragment();
   for (const entry of entries) {
     const li = document.createElement("li");
@@ -96,6 +97,13 @@ function renderHistory() {
   $("historyEmpty").hidden = entries.length > 0;
 }
 $("logFilter").addEventListener("change", renderHistory);
+$("logKind").addEventListener("change", renderHistory);
+$("resetLogFilters").addEventListener("click", () => {
+  $("logFilter").value = "all";
+  $("logKind").value = "all";
+  $("logSearch").value = "";
+  renderHistory();
+});
 $("logSearch").addEventListener("input", renderHistory);
 $("refreshHistory").addEventListener("click", refreshTelemetry);
 const specialEvents = {
@@ -127,13 +135,14 @@ async function refreshTelemetry() {
     telemetryKnown = true;
     history = data.rows.map(row => {
       const [label, tone] = Object.hasOwn(specialEvents, row.kind) ? specialEvents[row.kind] : describeState(row.kind);
-      return {label, tone, message: "", receivedAt: row.time};
+      return {kind: row.kind, label, tone, message: "", receivedAt: row.time};
     });
     if (!$("page-logs").hidden) renderHistory();
   } catch (error) {
     if (revision !== telemetryRevision) return;
     telemetryKnown = false;
     $("storageStatus").textContent = "无法读取运行记录";
+    if (!$("page-logs").hidden) renderHistory();
   } finally { updateControls(); }
 }
 $("notifications").addEventListener("change", () => action(async () => {
@@ -181,6 +190,39 @@ async function action(fn) {
   try { await fn(); } catch (error) { notice(String(error), true); }
   finally { busy = false; updateControls(); }
 }
+$("generateDiagnostic").addEventListener("click", () => action(async () => {
+  $("diagnosticText").value = "";
+  $("diagnosticStatus").textContent = "正在读取本地快照";
+  const [status, telemetry, version] = await Promise.allSettled([
+    invoke("get_status"), invoke("get_telemetry"),
+    Promise.resolve().then(() => tauri.app?.getVersion?.()),
+  ]);
+  const value = result => result.status === "fulfilled" ? result.value : null;
+  if (!value(status) && !value(telemetry)) {
+    $("diagnosticStatus").textContent = "后台状态和运行记录均不可用，未生成报告";
+    return;
+  }
+  const report = diagnosticReport(value(status), value(telemetry), value(version), new Date().toISOString());
+  $("diagnosticText").value = JSON.stringify(report, null, 2);
+  $("diagnosticStatus").textContent = value(status) && value(telemetry)
+    ? "报告已生成，请预览后复制"
+    : "报告已生成，但部分后台数据不可用";
+}));
+$("copyDiagnostic").addEventListener("click", async () => {
+  const output = $("diagnosticText");
+  if (!output.value || busy || updateBusy) return;
+  try {
+    // No native clipboard plugin or new IPC permission. Some WebViews
+    // deny clipboard access; selecting the text still permits manual copy.
+    if (!navigator.clipboard?.writeText) throw Error("clipboard unavailable");
+    await navigator.clipboard.writeText(output.value);
+    $("diagnosticStatus").textContent = "报告已复制，请检查后分享";
+  } catch {
+    output.focus();
+    output.select();
+    $("diagnosticStatus").textContent = "系统未允许自动复制，已选中报告，请按 Ctrl+C（macOS：Command+C）";
+  }
+});
 $("pauseToggle").addEventListener("click", () => action(async () => {
   const paused = !keepaliveControls(currentStatus).paused;
   await invoke("set_paused", { paused });

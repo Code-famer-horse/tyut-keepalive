@@ -127,3 +127,6 @@ select { padding: 7px 12px; max-width: 100%; }
 #storageStatus { overflow-wrap: anywhere; }
 
 .app-brand-image { object-fit: contain; background: transparent; flex-shrink: 0; }
+
+#diagnosticText { display: block; width: 100%; max-width: 100%; resize: vertical; min-height: 7rem; padding: 10px; box-sizing: border-box; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-family: ui-monospace, monospace; font-size: .78rem; }
+#logCount { margin: 0; }

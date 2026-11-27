@@ -63,10 +63,24 @@
           <label class="field">筛选状态
             <select id="logFilter"><option value="all">全部</option><option value="success">在线</option><option value="warning">等待与异常</option><option value="danger">错误</option><option value="neutral">其他</option><option value="active">检查与认证</option></select>
           </label>
+          <label class="field">事件类型
+            <select id="logKind"><option value="all">全部事件</option><option value="auth-confirmed">认证确认</option><option value="connection-lost">连接中断</option><option value="connection-restored">连接恢复</option><option value="network-changed">网络变化</option><option value="system-suspended">系统休眠</option><option value="system-resumed">系统唤醒</option><option value="invalid-credentials">密码错误</option><option value="credential-error">凭据存储异常</option><option value="paused">暂停保活</option></select>
+          </label>
           <label class="field">搜索运行记录<input id="logSearch" type="search" placeholder="输入事件名称或日期" /></label>
+          <div class="actions"><p id="logCount" class="muted" role="status" aria-live="polite">尚未读取记录</p><button id="resetLogFilters" class="quiet" type="button">重置筛选</button></div>
           <p id="historyEmpty" class="empty">暂无状态事件</p>
           <ol id="historyList" class="history-list" aria-label="最近状态事件"></ol>
         </div>
+        <article class="card settings-card">
+          <h3>脱敏诊断报告</h3>
+          <p class="muted">仅整理当前状态、统计及最近事件；不包含账号、密码、IP、MAC、原始错误或本机路径，不发送到网络。时间戳可能反映使用时间，分享前请检查。状态与日志分别读取，并非原子快照。</p>
+          <div class="actions">
+            <button id="generateDiagnostic" type="button" disabled>生成诊断报告</button>
+            <button id="copyDiagnostic" type="button" disabled>复制报告</button>
+          </div>
+          <label class="field" for="diagnosticText">报告预览<textarea id="diagnosticText" rows="7" readonly placeholder="点击生成后在此预览"></textarea></label>
+          <p id="diagnosticStatus" class="muted" role="status" aria-live="polite">尚未生成</p>
+        </article>
       </section>
       <section id="page-settings" aria-labelledby="settingsTitle" hidden>
         <div class="section-heading"><h2 id="settingsTitle">应用设置</h2></div>

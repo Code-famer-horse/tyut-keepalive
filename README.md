@@ -77,3 +77,7 @@ cargo audit --file src-tauri/Cargo.lock
 ## 独立测试安装包（不发布 Release）
 
 开发分支的 [Independent Test Installers](https://github.com/Code-famer-horse/tyut-keepalive/actions/workflows/test-build.yml) 工作流仅生成 Actions Artifacts。选择成功运行的 Windows MSI 或 Linux DEB/AppImage；压缩包内含 SHA256SUMS.txt 和 BUILD-INFO.json。测试版独立安装、凭据及自启，不启用更新，不配置系统代码签名。详细验收步骤见 [独立测试版说明](docs/v0.4.0-test-build.md)。
+
+### 本地故障诊断
+
+运行记录页支持按状态、具体事件和文本联合筛选，显示匹配条数并一键重置。点击「生成诊断报告」获取可预览的本地 JSON 快照，仅包含白名单状态、时间、计数、开关与事件类型，不含账号、密码、IP、MAC、路径或原始错误；无网络发送。复制失败时可手动复制。报告时间戳仍可能暴露使用时间，分享前自行检查；它不是校园网服务器会话记录。
