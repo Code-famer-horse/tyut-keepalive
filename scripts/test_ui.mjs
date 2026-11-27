@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeTheme, readTheme, saveTheme, describeState, addHistory, HISTORY_LIMIT, keepaliveControls, filterHistory, diagnosticReport } from "../dist/ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState, addHistory, HISTORY_LIMIT, keepaliveControls, filterHistory, diagnosticReport, countdownFrame } from "../dist/ui-state.js";
 
 test("theme supports three modes and handles corrupt preferences", () => {
   for (const theme of ["system", "light", "dark"]) assert.equal(normalizeTheme(theme), theme);
@@ -80,4 +80,15 @@ test("diagnostic handles unavailable and malformed data and bounds report length
   assert.equal(report.status.paused,null);
   assert.equal(report.telemetry.authConfirmed,null);
   assert.equal(report.telemetry.events.length,200);
+});
+
+test("countdown derives progress from scheduler snapshot, never from retry guesses", () => {
+  const schedule = { kind: "check", totalMs: 600000, remainingMs: 42000 };
+  assert.equal(countdownFrame(schedule, "check", 1000).label, "00:41");
+  assert.equal(countdownFrame(schedule, "check", 1000).fraction, 41000 / 600000);
+  assert.equal(countdownFrame(schedule, "retry", 0).active, false);
+  assert.equal(countdownFrame(schedule, "check", 100000).seconds, 0);
+  assert.equal(countdownFrame(null, "check", 0).label, "—");
+  assert.equal(countdownFrame({kind:"retry",totalMs:10000,remainingMs:10000},"retry",0).fraction,1);
+  assert.equal(countdownFrame({kind:"retry",totalMs:0,remainingMs:0},"retry",0).active,false);
 });

@@ -1,7 +1,7 @@
 {
   "productName": "TYUT Keepalive Test",
   "mainBinaryName": "tyut-keepalive-test",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "identifier": "com.tyut.keepalive.test",
   "build": {
     "frontendDist": "../dist-test"

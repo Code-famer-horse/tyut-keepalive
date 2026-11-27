@@ -1,7 +1,7 @@
 name: Independent Test Installers
 on:
   push:
-    branches: ['develop/v0.4.0']
+    branches: ['develop/v0.5.0']
     paths:
       - '.github/workflows/test-build.yml'
       - 'src-tauri/tauri.test.conf.json'
@@ -10,6 +10,11 @@ on:
       - 'scripts/test_test_artifacts.py'
       - 'src-tauri/icons/**'
       - 'dist/**'
+      - 'src-tauri/src/**'
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/Cargo.lock'
+      - 'src-tauri/tauri.conf.json'
+      - 'scripts/test_ui.mjs'
   workflow_dispatch:
 
 permissions:
@@ -17,7 +22,7 @@ permissions:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/develop/v0.4.0'
+    if: github.ref == 'refs/heads/develop/v0.5.0'
     strategy:
       fail-fast: false
       matrix:

@@ -66,7 +66,7 @@ def main():
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     require(commit == os.environ.get("GITHUB_SHA", commit), "checkout mismatch")
     metadata = {"channel": "test-only", "commit": commit, "platform": args.platform,
-                "target": args.target, "version": "0.4.0", "identifier": "com.tyut.keepalive.test",
+                "target": args.target, "version": json.loads((ROOT / "src-tauri/tauri.test.conf.json").read_text(encoding="utf-8"))["version"], "identifier": "com.tyut.keepalive.test",
                 "updater": "disabled", "systemCodeSigning": "not configured"}
     (out / "BUILD-INFO.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     files.append(out / "BUILD-INFO.json")

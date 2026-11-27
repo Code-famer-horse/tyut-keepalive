@@ -83,3 +83,16 @@ export function diagnosticReport(status, telemetry, version, capturedAt) {
     } : null,
   };
 }
+
+/** A display-only countdown: the Rust scheduler remains the sole task owner. */
+export function countdownFrame(schedule, kind, elapsedMs) {
+  if (!schedule || schedule.kind !== kind ||
+      !Number.isFinite(schedule.totalMs) || schedule.totalMs <= 0 ||
+      !Number.isFinite(schedule.remainingMs) || !Number.isFinite(elapsedMs)) {
+    return { active: false, seconds: 0, fraction: 0, label: "—" };
+  }
+  const remaining = Math.max(0, Math.min(schedule.totalMs, schedule.remainingMs - Math.max(0, elapsedMs)));
+  const seconds = Math.ceil(remaining / 1000);
+  const label = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+  return { active: true, seconds, fraction: remaining / schedule.totalMs, label };
+}

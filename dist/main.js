@@ -1,4 +1,4 @@
-import { normalizeTheme, readTheme, saveTheme, describeState, keepaliveControls, filterHistory, diagnosticReport } from "./ui-state.js";
+import { normalizeTheme, readTheme, saveTheme, describeState, keepaliveControls, filterHistory, diagnosticReport, countdownFrame } from "./ui-state.js";
 const $ = id => document.getElementById(id);
 const pages = ["overview", "logs", "settings", "about"];
 const controls = ["reconnect", "saveCredentials", "reset", "autostart", "hide", "quit"];
@@ -10,6 +10,29 @@ let updatesEnabled = false;
 let updateBusy = false;
 let pendingUpdate = null;
 let currentStatus = null;
+let scheduleReceivedAt = 0;
+let countdownTimer = null;
+function paintCountdowns() {
+  const elapsed = performance.now() - scheduleReceivedAt;
+  for (const kind of ["check", "retry"]) {
+    const frame = countdownFrame(currentStatus?.schedule, kind, elapsed);
+    $(kind + "Ring").setAttribute("stroke-dasharray", (frame.fraction * 100) + " 100");
+    $(kind + "Time").textContent = frame.label;
+    $(kind + "Dial").dataset.active = String(frame.active);
+    $(kind + "Hint").textContent = frame.active
+      ? (frame.seconds === 0 ? "等待后台执行" : "剩余时间")
+      : "待机";
+  }
+}
+function syncCountdownTimer() {
+  if (countdownTimer !== null) clearInterval(countdownTimer);
+  countdownTimer = null;
+  paintCountdowns();
+  if (!document.hidden && currentStatus?.schedule) {
+    countdownTimer = setInterval(paintCountdowns, 1000);
+  }
+}
+
 let autostartKnown = false;
 let busy = false;
 let statusRevision = 0;
@@ -66,6 +89,8 @@ function updateControls() {
 function render(status) {
   if (!status || typeof status !== "object") return;
   currentStatus = status;
+  scheduleReceivedAt = performance.now();
+  syncCountdownTimer();
   const [label, tone] = describeState(status.state);
   $("connectionCard").dataset.tone = tone;
   $("state").textContent = label;
@@ -316,7 +341,17 @@ async function initUpdates() {
     $("updateStatus").textContent = "无法读取签名更新配置";
   }
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (countdownTimer !== null) clearInterval(countdownTimer);
+    countdownTimer = null;
+  } else {
+    // A new backend snapshot is authoritative after sleep or a hidden window.
+    if (currentStatus) currentStatus = { ...currentStatus, schedule: null };
+    syncCountdownTimer();
+    refresh();
+  }
+});
 window.addEventListener("focus", refresh);
 async function init() {
   if (!invoke || !listen) {

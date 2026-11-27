@@ -38,7 +38,38 @@ pub(crate) struct Status {
     pub(crate) message: String,
     pub(crate) paused: bool,
     pub(crate) sleeping: bool,
+    #[serde(serialize_with = "serialize_schedule")]
+    pub(crate) schedule: Option<Schedule>,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Schedule {
+    deadline: Instant,
+    total: Duration,
+    task: Task,
+}
+
+impl Schedule {
+    fn remaining_ms(&self, now: Instant) -> u64 {
+        self.deadline.saturating_duration_since(now).as_millis() as u64
+    }
+}
+
+fn serialize_schedule<S: serde::Serializer>(schedule: &Option<Schedule>, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Snapshot {
+        kind: &'static str,
+        remaining_ms: u64,
+        total_ms: u64,
+    }
+    schedule.as_ref().map(|s| Snapshot {
+        kind: match s.task { Task::Check => "check", Task::Retry => "retry", Task::Login => "login" },
+        remaining_ms: s.remaining_ms(Instant::now()),
+        total_ms: s.total.as_millis() as u64,
+    }).serialize(serializer)
+}
+
 
 pub(crate) type SharedStatus = Arc<Mutex<Status>>;
 pub(crate) type Reply = Sender<std::result::Result<(), String>>;
@@ -123,12 +154,19 @@ fn publish_observed(app: &AppHandle, shared: &SharedStatus, status: &mut Status,
                     state: ConnectionState, message: impl Into<String>, observation: Option<bool>, authenticated: bool) {
     status.state = state;
     status.message = message.into();
+    if !matches!(state, ConnectionState::Online | ConnectionState::Offline) {
+        status.schedule = None;
+    }
+    emit_status(app, shared, status);
+    crate::telemetry::on_state(app, state, observation, authenticated);
+    crate::tray::update(app, status);
+}
+
+fn emit_status(app: &AppHandle, shared: &SharedStatus, status: &Status) {
     if let Ok(mut guard) = shared.lock() {
         *guard = status.clone();
     }
     let _ = app.emit("status", status.clone());
-    crate::telemetry::on_state(app, state, observation, authenticated);
-    crate::tray::update(app, status);
 }
 
 fn due(task: Task, delay: Duration) -> Option<(Instant, Task)> {
@@ -252,6 +290,8 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                         // Only explicit reconnect is allowed to retry rejected credentials.
                         invalidate(&mut generation, &cancellation);
                         next = due(Task::Login, Duration::ZERO);
+                        status.schedule = None;
+                        emit_status(&app, &shared, &status);
                     }
                 }
                 Ok(Event::SetPaused(paused, reply)) => {
@@ -357,6 +397,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                             if matches!(outcome, Outcome::Authenticated(_)) { status.last_login = now(); }
                             retry = RETRY_INITIAL;
                             next = due(Task::Check, WATCH_INTERVAL);
+                            status.schedule = next.map(|(deadline, task)| Schedule { deadline, task, total: WATCH_INTERVAL });
                             publish_observed(&app, &shared, &mut status, ConnectionState::Online, "网络正常，10 分钟后复查", Some(true), matches!(outcome, Outcome::Authenticated(portal::LoginOutcome::Success)));
                         }
                         Outcome::Authenticated(portal::LoginOutcome::BadPassword) => {
@@ -374,6 +415,7 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
                                 retry = (retry * 2).min(RETRY_MAX);
                             }
                             next = due(Task::Retry, retry);
+                            status.schedule = next.map(|(deadline, task)| Schedule { deadline, task, total: retry });
                             // A transport error alone is not proof of a lost network link.
                             let observation = match other {
                                 Outcome::Checked(false) | Outcome::Authenticated(portal::LoginOutcome::Indeterminate) => Some(false),
@@ -393,6 +435,20 @@ pub(crate) fn start_worker(app: AppHandle, shared: SharedStatus) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn schedule_uses_actual_deadline_and_saturates() {
+        let start = Instant::now();
+        let schedule = Schedule { deadline: start + Duration::from_secs(10), total: Duration::from_secs(10), task: Task::Retry };
+        assert_eq!(schedule.remaining_ms(start + Duration::from_secs(3)), 7000);
+        assert_eq!(schedule.remaining_ms(start + Duration::from_secs(12)), 0);
+        let status = Status { schedule: Some(schedule), ..Default::default() };
+        let value = serde_json::to_value(&status).unwrap();
+        assert_eq!(value["schedule"]["kind"], "retry");
+        assert_eq!(value["schedule"]["totalMs"], 10000);
+        assert!(value["schedule"]["remainingMs"].as_u64().unwrap() <= 10000);
+        assert!(serde_json::to_value(Status::default()).unwrap()["schedule"].is_null());
+    }
+
     #[test]
     fn command_interrupts_future_deadline() {
         let (tx, rx) = mpsc::channel();

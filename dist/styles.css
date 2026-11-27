@@ -130,3 +130,16 @@ select { padding: 7px 12px; max-width: 100%; }
 
 #diagnosticText { display: block; width: 100%; max-width: 100%; resize: vertical; min-height: 7rem; padding: 10px; box-sizing: border-box; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-family: ui-monospace, monospace; font-size: .78rem; }
 #logCount { margin: 0; }
+
+.countdown-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.countdown-dial { text-align: center; display: grid; justify-items: center; gap: 8px; }
+.countdown-dial h3 { font-size: .9rem; }
+.dial-face { position: relative; width: min(100%, 132px); aspect-ratio: 1; }
+.dial-face svg { display: block; width: 100%; height: 100%; }
+.dial-track { stroke: var(--border); }
+.dial-progress { stroke: var(--success); }
+#retryDial .dial-progress { stroke: var(--warning); }
+.dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.dial-center strong { font-size: 1.45rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.countdown-dial[data-active="false"] .dial-center strong { color: var(--muted); }
+@media (max-width: 440px) { .countdown-grid { gap: 8px; } .countdown-dial { padding: 10px; } .dial-center strong { font-size: 1.15rem; } }

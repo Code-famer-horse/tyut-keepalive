@@ -39,6 +39,28 @@
           </div>
           <dl class="account-line"><dt>登录账号</dt><dd id="account">—</dd></dl>
         </article>
+        <div class="countdown-grid">
+          <article class="card countdown-dial" id="checkDial" data-active="false">
+            <h3>下次网络检测</h3>
+            <div class="dial-face">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="dial-track" cx="60" cy="60" r="51" fill="none" stroke-width="9" />
+                <circle class="dial-progress" id="checkRing" cx="60" cy="60" r="51" fill="none" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 60 60)" />
+              </svg>
+              <div class="dial-center"><strong id="checkTime">—</strong><span class="muted" id="checkHint">待机</span></div>
+            </div>
+          </article>
+          <article class="card countdown-dial" id="retryDial" data-active="false">
+            <h3>断线重试</h3>
+            <div class="dial-face">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="dial-track" cx="60" cy="60" r="51" fill="none" stroke-width="9" />
+                <circle class="dial-progress" id="retryRing" cx="60" cy="60" r="51" fill="none" stroke-width="9" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 60 60)" />
+              </svg>
+              <div class="dial-center"><strong id="retryTime">—</strong><span class="muted" id="retryHint">待机</span></div>
+            </div>
+          </article>
+        </div>
         <div class="metrics">
           <article class="card metric"><h3>最近网络检查</h3><p id="lastCheck">—</p><span class="muted">后台实际检测时间</span></article>
           <article class="card metric"><h3>最近认证成功</h3><p id="lastLogin">—</p><span class="muted">最近成功认证记录</span></article>
