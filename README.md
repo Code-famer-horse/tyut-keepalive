@@ -1,17 +1,17 @@
 # TYUT Keepalive
 
-太原理工大学校园网自动认证与保活桌面工具，基于 Rust 和 Tauri 2。当前仓库为 [NoRegret-L/tyut-keepalive](https://github.com/NoRegret-L/tyut-keepalive) 的 fork。
+太原理工大学校园网自动认证与保活桌面工具，基于 Rust 和 Tauri 2。官方仓库：[NoRegret-L/tyut-keepalive](https://github.com/NoRegret-L/tyut-keepalive)。
 
-> v0.4.0 正在 develop/v0.4.0 开发；本分支不是已发布版本。Windows/Linux 开发 CI 和 macOS 兼容性 CI 分开运行，正式发布前必须通过三平台验证。应用版本将在正式发版前统一更新。
+> v0.5.0 为待发布开发版本，当前正式版以 Releases 为准。PR 与主分支执行 Windows、macOS、Linux 三平台 CI；正式发布仍需通过签名及真机验收。
 
 ## 安装与使用
 
-从本 fork 的 [Releases](https://github.com/Code-famer-horse/tyut-keepalive/releases) 下载实际已发布的对应平台安装包。旧版发布资产的名称可能不同，不要把开发分支当成已发布安装包。
+从官方 [Releases](https://github.com/NoRegret-L/tyut-keepalive/releases) 下载实际已发布的对应平台安装包。旧版发布资产的名称可能不同，不要把开发分支当成已发布安装包。
 
 | 平台 | 计划提供的安装包 | 注意事项 |
 | --- | --- | --- |
 | Windows x64 | MSI | 按安装器提示安装，需 WebView2 |
-| macOS Apple Silicon | DMG | 拖入应用程序目录；实际兼容性和系统签名仍需验证 |
+| macOS Universal（Intel / Apple Silicon，开发版目标） | DMG | 拖入应用程序目录；实际兼容性和系统签名仍需验证 |
 | Linux x64 | DEB、AppImage | DEB 使用系统包管理器升级；AppImage 可使用签名更新 |
 
 1. 打开应用，在连接设置中输入校园网账号和密码，保存凭据。
@@ -43,7 +43,7 @@ npm run tauri -- signer generate -w ~/.tauri/tyut-keepalive.key
 
 仅将 .pub 文件内容填入 src-tauri/tauri.conf.json 的 plugins.updater.pubkey。私钥和密码应保存于 GitHub Actions Secrets（TAURI_SIGNING_PRIVATE_KEY、TAURI_SIGNING_PRIVATE_KEY_PASSWORD），不得提交或发送给他人。丢失私钥可能使既有安装无法安全升级。更新签名不是 Windows Authenticode 或 macOS Developer ID 签名的替代品。
 
-正式发布前须统一 package.json、package-lock.json、Cargo.toml、Cargo.lock、tauri.conf.json 中的应用版本，并由维护者确认发布标签。发布工作流先完成三平台严格锁定测试、RustSec 审计和公钥/标签检查，再签名构建上传草稿；更新清单包含三平台后才公开 Release。当前未配置公钥、未创建标签、未进行真实签名升级测试。
+正式发布前须统一 package.json、package-lock.json、Cargo.toml、Cargo.lock、tauri.conf.json 中的应用版本，并由维护者确认发布标签。发布工作流先完成三平台严格锁定测试、RustSec 审计和公钥/标签检查，再签名构建上传草稿；更新清单包含 Windows、Linux 及 macOS 双架构后才公开 Release。当前未配置公钥、未创建标签、未进行真实签名升级测试。
 
 ## 源码开发
 
@@ -74,9 +74,9 @@ cargo audit --file src-tauri/Cargo.lock
 
 发布前检查与剩余依赖风险见 [v0.4.0 验收记录](docs/v0.4.0-release-review.md)。
 
-## 独立测试安装包（不发布 Release）
+## 独立测试安装包
 
-开发分支的 [Independent Test Installers](https://github.com/Code-famer-horse/tyut-keepalive/actions/workflows/test-build.yml) 工作流仅生成 Actions Artifacts。选择成功运行的 Windows MSI 或 Linux DEB/AppImage；压缩包内含 SHA256SUMS.txt 和 BUILD-INFO.json。测试版独立安装、凭据及自启，不启用更新，不配置系统代码签名。详细验收步骤见 [独立测试版说明](docs/v0.4.0-test-build.md)。
+开发分支的 [Independent Test Installers](https://github.com/NoRegret-L/tyut-keepalive/actions/workflows/test-build.yml) 默认仅生成 Actions Artifacts；维护者可在官方仓库手动运行工作流发布按提交 SHA 标识的独立 prerelease，不覆盖旧资产、不设为 latest。选择成功运行的 Windows MSI、Linux DEB/AppImage 或 macOS Universal DMG；压缩包内含 SHA256SUMS.txt 和 BUILD-INFO.json。测试版独立安装、凭据及自启，不启用更新，不配置系统代码签名。详细验收步骤见 [独立测试版说明](docs/v0.4.0-test-build.md)。
 
 ### 本地故障诊断
 

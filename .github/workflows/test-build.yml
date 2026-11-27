@@ -17,6 +17,9 @@ on:
       - 'src-tauri/Cargo.lock'
       - 'src-tauri/tauri.conf.json'
       - 'scripts/test_ui.mjs'
+      - 'scripts/check_security.py'
+      - 'scripts/check_update_manifest.py'
+      - 'scripts/test_release_checks.py'
   workflow_dispatch:
 
 permissions:
@@ -110,7 +113,8 @@ jobs:
 
   publish_test:
     needs: [verify, bundle]
-    if: startsWith(github.ref, 'refs/heads/develop/v')
+    # Publishing is explicit; a normal development push only builds artifacts.
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'NoRegret-L/tyut-keepalive' && startsWith(github.ref, 'refs/heads/develop/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -165,7 +169,7 @@ jobs:
                   sums.append(f"{digest}  {name}")
           (output / "SHA256SUMS.txt").write_text("\n".join(sorted(sums)) + "\n")
           with open(os.environ["GITHUB_ENV"], "a") as env:
-              env.write(f"TEST_TAG=test-v{version}\n")
+              env.write(f"TEST_TAG=test-v{version}-{sha}\n")
           PY
       - name: Publish verified installers as a non-latest prerelease
         env:
@@ -174,13 +178,38 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$TEST_TAG" >/dev/null 2>&1; then
-            # Existing v0.5.0 release: append only the macOS supplement.
-            test "$TEST_TAG" = test-v0.5.0
             test "$(gh release view "$TEST_TAG" --json isPrerelease,isDraft --jq '.isPrerelease and (.isDraft | not)')" = true
-            mkdir -p macos-supplement
-            cp publish-output/*-macos-universal.dmg publish-output/BUILD-INFO-macos.json macos-supplement/
-            (cd macos-supplement && sha256sum *.dmg BUILD-INFO-macos.json > SHA256SUMS-macos.txt)
-            gh release upload "$TEST_TAG" macos-supplement/*
+            test "$(gh api "repos/$GH_REPO/commits/$TEST_TAG" --jq .sha)" = "$GITHUB_SHA"
+            mkdir -p existing-release
+            gh release download "$TEST_TAG" --dir existing-release
+            # Verify the existing immutable release; a rebuild may not be byte reproducible.
+            python - <<'PY'
+          import hashlib, json, os, pathlib, re
+          existing = pathlib.Path("existing-release")
+          expected = pathlib.Path("publish-output")
+          names = {p.name for p in expected.iterdir()}
+          if {p.name for p in existing.iterdir()} != names:
+              raise SystemExit("existing release asset set differs; refusing to overwrite")
+          sums = {}
+          for line in (existing / "SHA256SUMS.txt").read_text().splitlines():
+              digest, name = line.split("  ", 1)
+              if not re.fullmatch(r"[a-f0-9]{64}", digest) or name not in names - {"SHA256SUMS.txt"} or name in sums:
+                  raise SystemExit("invalid existing checksum manifest")
+              sums[name] = digest
+          if set(sums) != names - {"SHA256SUMS.txt"}:
+              raise SystemExit("incomplete existing checksum manifest")
+          for name, digest in sums.items():
+              with (existing / name).open("rb") as stream:
+                  if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
+                      raise SystemExit("existing release checksum mismatch")
+              if name.startswith("BUILD-INFO-"):
+                  old = json.loads((existing / name).read_text())
+                  new = json.loads((expected / name).read_text())
+                  for key in ("channel", "commit", "platform", "version", "identifier", "updater"):
+                      if old.get(key) != new.get(key):
+                          raise SystemExit("existing release identity mismatch")
+          print("Existing test release verified; no assets changed")
+          PY
             exit 0
           fi
           gh release create "$TEST_TAG" publish-output/* \

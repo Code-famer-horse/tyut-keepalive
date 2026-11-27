@@ -8,8 +8,8 @@ use std::sync::{
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-const ENDPOINT: &str = "https://github.com/Code-famer-horse/tyut-keepalive/releases/latest/download/latest.json";
-const DOWNLOAD_PREFIX: &str = "/Code-famer-horse/tyut-keepalive/releases/download/";
+const ENDPOINT: &str = "https://github.com/NoRegret-L/tyut-keepalive/releases/latest/download/latest.json";
+const DOWNLOAD_PREFIX: &str = "/NoRegret-L/tyut-keepalive/releases/download/";
 
 #[derive(Default)]
 pub(crate) struct UpdateState {
@@ -117,10 +117,10 @@ mod tests {
         let valid = format!("https://github.com{DOWNLOAD_PREFIX}v0.4.0/app.msi");
         assert!(trusted_download(&reqwest::Url::parse(&valid).unwrap()));
         for bad in [
-            "http://github.com/Code-famer-horse/tyut-keepalive/releases/download/v0.4.0/app.msi",
-            "https://github.com.evil.example/Code-famer-horse/tyut-keepalive/releases/download/v0.4.0/app.msi",
-            "https://github.com/NoRegret-L/tyut-keepalive/releases/download/v0.4.0/app.msi",
-            "https://user@github.com/Code-famer-horse/tyut-keepalive/releases/download/v0.4.0/app.msi",
+            "http://github.com/NoRegret-L/tyut-keepalive/releases/download/v0.4.0/app.msi",
+            "https://github.com.evil.example/NoRegret-L/tyut-keepalive/releases/download/v0.4.0/app.msi",
+            "https://github.com/Code-famer-horse/tyut-keepalive/releases/download/v0.4.0/app.msi",
+            "https://user@github.com/NoRegret-L/tyut-keepalive/releases/download/v0.4.0/app.msi",
         ] { assert!(!trusted_download(&reqwest::Url::parse(bad).unwrap())); }
     }
     #[test]

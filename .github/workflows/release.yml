@@ -62,7 +62,7 @@ jobs:
           - platform: windows-latest
             args: --bundles msi
           - platform: macos-15
-            args: --bundles app,dmg
+            args: --target universal-apple-darwin --bundles app,dmg
           - platform: ubuntu-latest
             args: --bundles deb,appimage
     runs-on: ${{ matrix.platform }}
@@ -82,6 +82,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-15' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
 

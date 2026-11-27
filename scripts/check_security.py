@@ -10,7 +10,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "src-tauri/tauri.conf.json"
-ENDPOINT = "https://github.com/Code-famer-horse/tyut-keepalive/releases/latest/download/latest.json"
+ENDPOINT = "https://github.com/NoRegret-L/tyut-keepalive/releases/latest/download/latest.json"
 COMMANDS = ["get_status","get_telemetry","set_notifications","reconnect","set_paused","reset_credentials","setup_credentials","set_autostart","is_autostart","quit","hide_window","update_enabled","check_update","install_update"]
 PERMISSIONS = {"core:event:allow-listen", "core:event:allow-unlisten", "core:app:allow-version",
                *("allow-" + c.replace("_", "-") for c in COMMANDS)}

@@ -9,10 +9,10 @@ class ManifestTests(unittest.TestCase):
         self.data = {"version": "0.4.0", "platforms": {}}
         self.assets = []
         sig = base64.b64encode(b"trusted comment: timestamp:0\tfile:fixture\tversion:0.4.0\n").decode()
-        for platform, name in [("windows-x86_64", "app.msi"), ("darwin-aarch64", "app.app.tar.gz"), ("linux-x86_64", "app.AppImage")]:
+        for platform, name in [("windows-x86_64", "app.msi"), ("darwin-aarch64", "app.app.tar.gz"), ("darwin-x86_64", "app.app.tar.gz"), ("linux-x86_64", "app.AppImage")]:
             self.data["platforms"][platform] = {
                 "signature": sig,
-                "url": "https://github.com/Code-famer-horse/tyut-keepalive/releases/download/v0.4.0/" + name
+                "url": "https://github.com/NoRegret-L/tyut-keepalive/releases/download/v0.4.0/" + name
             }
             self.assets.extend([{"name": name, "size": 100}, {"name": name + ".sig", "size": 10}])
 
@@ -21,6 +21,17 @@ class ManifestTests(unittest.TestCase):
 
     def test_missing_platform(self):
         del self.data["platforms"]["darwin-aarch64"]
+        with self.assertRaises(SystemExit):
+            check(self.data, self.tag, self.assets)
+
+    def test_missing_intel_mac(self):
+        del self.data["platforms"]["darwin-x86_64"]
+        with self.assertRaises(SystemExit):
+            check(self.data, self.tag, self.assets)
+
+    def test_fork_asset_rejected(self):
+        item = self.data["platforms"]["windows-x86_64"]
+        item["url"] = item["url"].replace("NoRegret-L/", "Code-famer-horse/")
         with self.assertRaises(SystemExit):
             check(self.data, self.tag, self.assets)
 
