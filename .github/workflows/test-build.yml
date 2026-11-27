@@ -11,6 +11,8 @@ on:
       - 'src-tauri/icons/**'
       - 'dist/**'
       - 'src-tauri/src/**'
+      - 'src-tauri/vendor/**'
+      - '.github/workflows/platform-checks.yml'
       - 'src-tauri/Cargo.toml'
       - 'src-tauri/Cargo.lock'
       - 'src-tauri/tauri.conf.json'

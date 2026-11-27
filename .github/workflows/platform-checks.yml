@@ -40,6 +40,9 @@ jobs:
         run: cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked
       - name: Rust unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Link macOS release binary (detect missing native symbols)
+        if: runner.os == 'macOS'
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --locked --bin tyut-keepalive
       - name: Compile release configuration
         run: cargo check --manifest-path src-tauri/Cargo.toml --release --locked
       - name: Save resolved lockfile

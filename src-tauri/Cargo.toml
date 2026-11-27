@@ -33,3 +33,7 @@ reqwest = { version = "0.13", default-features = false, features = ["blocking", 
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Temporary upstream 0.1.0 fix; remove when a corrected release is available.
+[patch.crates-io]
+tauri-plugin-power-monitor = { path = "vendor/tauri-plugin-power-monitor" }
