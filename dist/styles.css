@@ -125,3 +125,5 @@ select { padding: 7px 12px; max-width: 100%; }
 
 #logSearch { padding: 8px 12px; width: 100%; }
 #storageStatus { overflow-wrap: anywhere; }
+
+.app-brand-image { object-fit: contain; background: transparent; flex-shrink: 0; }

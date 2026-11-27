@@ -8,6 +8,8 @@ on:
       - 'scripts/prepare_test_build.py'
       - 'scripts/collect_test_artifacts.py'
       - 'scripts/test_test_artifacts.py'
+      - 'src-tauri/icons/**'
+      - 'dist/**'
   workflow_dispatch:
 
 permissions:

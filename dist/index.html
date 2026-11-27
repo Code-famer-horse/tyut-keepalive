@@ -4,15 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TYUT 校园网保活</title>
+  <link rel="icon" type="image/png" href="./app-icon.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <div class="app">
     <header class="app-header">
       <div class="brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8 16a6 6 0 0 1 8 0" /><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none" /></svg>
-        </div>
+        <img class="brand-icon app-brand-image" src="./app-icon.png" alt="" width="40" height="40" />
         <div><h1>TYUT Keepalive</h1><p>校园网络连接助手</p></div>
       </div>
       <button class="quiet" id="hide" type="button" disabled>隐藏到后台</button>
@@ -103,7 +102,7 @@
       <section id="page-about" aria-labelledby="aboutTitle" hidden>
         <div class="section-heading"><h2 id="aboutTitle">关于应用</h2></div>
         <article class="card about-card">
-          <div class="brand-icon about-icon" aria-hidden="true">TY</div>
+          <img class="brand-icon about-icon app-brand-image" src="./app-icon.png" alt="" width="64" height="64" />
           <h3>TYUT Keepalive</h3><p id="appVersion" class="muted">开发版本</p>
           <p>校园网自动认证与后台保活工具。</p>
           <p class="muted">Rust · Tauri 2 · 原生桌面窗口</p>
